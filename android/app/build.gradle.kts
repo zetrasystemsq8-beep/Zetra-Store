@@ -1,12 +1,11 @@
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.nigergram.app"
+    namespace = "com.zetra.store"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,28 +18,21 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file("nigergram.jks")
-            storePassword = "nigergram123"
-            keyAlias = "nigergram"
-            keyPassword = "nigergram123"
-        }
-    }
-
     defaultConfig {
-        applicationId = "com.nigergram.app"
+        applicationId = "com.zetra.store"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
         multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // TEMP: signs release builds with the debug key so
+            // `flutter build apk --release` keeps working. Replace with
+            // your own signingConfig before publishing a real release.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
