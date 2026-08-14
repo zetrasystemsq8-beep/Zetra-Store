@@ -73,14 +73,14 @@ class AppTheme {
         ),
       ),
     ),
-    cardTheme: CardTheme(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-    ),
+    cardTheme: CardThemeData(
+  elevation: 0,
+  color: Colors.white,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(16),
+    side: BorderSide(color: Colors.grey.shade200),
+  ),
+),
   );
 
   static ThemeData dark = ThemeData(
