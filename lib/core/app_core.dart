@@ -9,11 +9,12 @@ import '../features/tester_actions.dart';
 /// ---------------------------------------------------------------------
 /// ENVIRONMENT / SUPABASE CONFIG
 /// ---------------------------------------------------------------------
-/// Fill these in from your Supabase project:
-/// Project Settings -> API -> Project URL / anon public key
+/// Values come from --dart-define at build time (see your GitHub
+/// Actions workflow), never hardcoded here.
 class Env {
-  static const String supabaseUrl = 'YOUR_SUPABASE_URL';
-  static const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey =
+      String.fromEnvironment('SUPABASE_ANON_KEY');
 }
 
 /// ---------------------------------------------------------------------
