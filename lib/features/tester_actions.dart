@@ -1,0 +1,700 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../core/models.dart';
+import 'developer.dart';
+import 'discover.dart';
+
+/// ---------------------------------------------------------------------
+/// REPOSITORY
+/// ---------------------------------------------------------------------
+const kPlaceholderTesterId = 'demo-tester';
+
+class PlatformRepository {
+  PlatformRepository(this._client);
+
+  final SupabaseClient _client;
+
+  Future<String> uploadBugScreenshot(String appId, Uint8List bytes) async {
+    final path =
+        'apps/$appId/bug-screenshots/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _client.storage.from('apps').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+    return _client.storage.from('apps').getPublicUrl(path);
+  }
+
+  Future<List<BugReport>> fetchMyBugReports(String testerId) async {
+    final rows = await _client
+        .from('bug_reports')
+        .select()
+        .eq('reporter_id', testerId)
+        .order('created_at', ascending: false);
+    return rows.map((r) => BugReport.fromMap(r)).toList();
+  }
+
+  Future<List<FeedbackModel>> fetchMyFeedback(String testerId) async {
+    final rows = await _client
+        .from('feedback')
+        .select()
+        .eq('user_id', testerId)
+        .order('created_at', ascending: false);
+    return rows.map((r) => FeedbackModel.fromMap(r)).toList();
+  }
+
+  Future<List<AppModel>> fetchPendingApps() async {
+    final rows = await _client
+        .from('apps')
+        .select()
+        .eq('status', AppStatus.pendingReview.name)
+        .order('created_at', ascending: false);
+    return rows.map((r) => AppModel.fromMap(r)).toList();
+  }
+
+  Future<void> approveApp(String appId) async {
+    await _client
+        .from('apps')
+        .update({'status': AppStatus.published.name}).eq('id', appId);
+  }
+
+  Future<void> rejectApp(String appId) async {
+    await _client
+        .from('apps')
+        .update({'status': AppStatus.draft.name}).eq('id', appId);
+  }
+}
+
+final platformRepositoryProvider = Provider<PlatformRepository>((ref) {
+  return PlatformRepository(ref.watch(supabaseClientProvider));
+});
+
+final myBugReportsProvider =
+    FutureProvider.autoDispose<List<BugReport>>((ref) {
+  return ref
+      .watch(platformRepositoryProvider)
+      .fetchMyBugReports(kPlaceholderTesterId);
+});
+
+final myFeedbackProvider =
+    FutureProvider.autoDispose<List<FeedbackModel>>((ref) {
+  return ref
+      .watch(platformRepositoryProvider)
+      .fetchMyFeedback(kPlaceholderTesterId);
+});
+
+final pendingAppsProvider = FutureProvider.autoDispose<List<AppModel>>((ref) {
+  return ref.watch(platformRepositoryProvider).fetchPendingApps();
+});
+
+/// ---------------------------------------------------------------------
+/// BUG REPORT FORM
+/// ---------------------------------------------------------------------
+class BugReportScreen extends ConsumerStatefulWidget {
+  const BugReportScreen({super.key, required this.appId});
+
+  final String appId;
+
+  @override
+  ConsumerState<BugReportScreen> createState() => _BugReportScreenState();
+}
+
+class _BugReportScreenState extends ConsumerState<BugReportScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  final _device = TextEditingController();
+  final _androidVersion = TextEditingController();
+  final _steps = TextEditingController();
+  BugSeverity _severity = BugSeverity.minor;
+  XFile? _screenshot;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    _device.dispose();
+    _androidVersion.dispose();
+    _steps.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickScreenshot() async {
+    final file = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file != null) setState(() => _screenshot = file);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      String? screenshotUrl;
+      if (_screenshot != null) {
+        final bytes = await _screenshot!.readAsBytes();
+        screenshotUrl = await ref
+            .read(platformRepositoryProvider)
+            .uploadBugScreenshot(widget.appId, bytes);
+      }
+
+      final app = await ref.read(appDetailsProvider(widget.appId).future);
+
+      await ref.read(appsRepositoryProvider).submitBugReport(
+            BugReport(
+              id: '',
+              appId: widget.appId,
+              appName: app.name,
+              reporterId: kPlaceholderTesterId,
+              title: _title.text.trim(),
+              description: _description.text.trim(),
+              severity: _severity,
+              status: BugStatus.submitted,
+              createdAt: DateTime.now(),
+              device:
+                  _device.text.trim().isEmpty ? null : _device.text.trim(),
+              androidVersion: _androidVersion.text.trim().isEmpty
+                  ? null
+                  : _androidVersion.text.trim(),
+              stepsToReproduce:
+                  _steps.text.trim().isEmpty ? null : _steps.text.trim(),
+              screenshotUrl: screenshotUrl,
+            ),
+          );
+
+      ref.invalidate(myBugReportsProvider);
+      ref.invalidate(appBugReportsProvider(widget.appId));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bug report submitted. Thanks!')));
+      context.pop();
+    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not submit: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Report a bug')),
+      body: SafeArea(
+        child: AbsorbPointer(
+          absorbing: _saving,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextFormField(
+                    controller: _title,
+                    decoration: const InputDecoration(labelText: 'Title'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _description,
+                    decoration:
+                        const InputDecoration(labelText: 'Description'),
+                    maxLines: 4,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<BugSeverity>(
+                    value: _severity,
+                    decoration: const InputDecoration(labelText: 'Severity'),
+                    items: BugSeverity.values
+                        .map((s) =>
+                            DropdownMenuItem(value: s, child: Text(s.label)))
+                        .toList(),
+                    onChanged: (s) => setState(() => _severity = s ?? _severity),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _device,
+                          decoration: const InputDecoration(
+                              labelText: 'Device (optional)'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _androidVersion,
+                          decoration:
+                              const InputDecoration(labelText: 'Android version'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _steps,
+                    decoration: const InputDecoration(
+                        labelText: 'Steps to reproduce (optional)'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  _PickerTile(
+                    label: _screenshot == null
+                        ? 'Attach screenshot (optional)'
+                        : _screenshot!.name,
+                    icon: Icons.image_outlined,
+                    onTap: _pickScreenshot,
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _saving ? null : _submit,
+                    child: _saving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Submit report'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerTile extends StatelessWidget {
+  const _PickerTile(
+      {required this.label, required this.icon, required this.onTap});
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.grey.shade600),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+            Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------
+/// FEEDBACK FORM
+/// ---------------------------------------------------------------------
+class FeedbackScreen extends ConsumerStatefulWidget {
+  const FeedbackScreen({super.key, required this.appId});
+
+  final String appId;
+
+  @override
+  ConsumerState<FeedbackScreen> createState() => _FeedbackScreenState();
+}
+
+class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
+  int _rating = 5;
+  final _liked = TextEditingController();
+  final _disliked = TextEditingController();
+  final _suggestions = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _liked.dispose();
+    _disliked.dispose();
+    _suggestions.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _saving = true);
+    try {
+      final app = await ref.read(appDetailsProvider(widget.appId).future);
+
+      await ref.read(appsRepositoryProvider).submitFeedback(
+            FeedbackModel(
+              id: '',
+              appId: widget.appId,
+              appName: app.name,
+              userId: kPlaceholderTesterId,
+              rating: _rating,
+              createdAt: DateTime.now(),
+              liked: _liked.text.trim().isEmpty ? null : _liked.text.trim(),
+              disliked:
+                  _disliked.text.trim().isEmpty ? null : _disliked.text.trim(),
+              suggestions: _suggestions.text.trim().isEmpty
+                  ? null
+                  : _suggestions.text.trim(),
+            ),
+          );
+
+      ref.invalidate(myFeedbackProvider);
+      ref.invalidate(appFeedbackProvider(widget.appId));
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Feedback submitted. Thanks!')));
+      context.pop();
+    } catch (e) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not submit: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Give feedback')),
+      body: SafeArea(
+        child: AbsorbPointer(
+          absorbing: _saving,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('How would you rate this app?',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Row(
+                  children: List.generate(5, (i) {
+                    final filled = i < _rating;
+                    return IconButton(
+                      icon: Icon(
+                          filled
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          color: Colors.amber,
+                          size: 32),
+                      onPressed: () => setState(() => _rating = i + 1),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _liked,
+                  decoration: const InputDecoration(
+                      labelText: 'What did you like? (optional)'),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _disliked,
+                  decoration: const InputDecoration(
+                      labelText: 'What did you dislike? (optional)'),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _suggestions,
+                  decoration:
+                      const InputDecoration(labelText: 'Suggestions (optional)'),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _saving ? null : _submit,
+                  child: _saving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Submit feedback'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------
+/// MY TESTS
+/// ---------------------------------------------------------------------
+class MyTestsScreen extends ConsumerWidget {
+  const MyTestsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bugsAsync = ref.watch(myBugReportsProvider);
+    final feedbackAsync = ref.watch(myFeedbackProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('My tests')),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(myBugReportsProvider);
+          ref.invalidate(myFeedbackProvider);
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const SectionHeader(title: 'Bug reports you submitted'),
+            bugsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, st) =>
+                  const ErrorState(message: 'Could not load your bug reports'),
+              data: (bugs) {
+                if (bugs.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.bug_report_outlined,
+                    title: 'No bug reports yet',
+                    subtitle: 'Reports you submit will show up here.',
+                  );
+                }
+                return Column(
+                  children: bugs
+                      .map((b) => Card(
+                            child: ListTile(
+                              title: Text(b.title),
+                              subtitle: Text(b.appName),
+                              trailing: SeverityBadge(severity: b.severity),
+                            ),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+            const SectionHeader(title: 'Feedback you gave'),
+            feedbackAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, st) =>
+                  const ErrorState(message: 'Could not load your feedback'),
+              data: (items) {
+                if (items.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.rate_review_outlined,
+                    title: 'No feedback yet',
+                    subtitle: 'Feedback you give will show up here.',
+                  );
+                }
+                return Column(
+                  children: items
+                      .map((f) => Card(
+                            child: ListTile(
+                              title: Text(f.appName),
+                              subtitle: Text('${f.rating} / 5'),
+                            ),
+                          ))
+                      .toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------
+/// PROFILE
+/// ---------------------------------------------------------------------
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          CircleAvatar(
+            radius: 36,
+            backgroundColor:
+                Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(Icons.person_rounded,
+                size: 36, color: Theme.of(context).colorScheme.primary),
+          ),
+          const SizedBox(height: 12),
+          const Text('Signed-in profile',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          const SizedBox(height: 4),
+          Text(
+            'Real accounts arrive once ZetraMail auth is wired in. For '
+            'now, actions are attributed to a demo account.',
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.dashboard_outlined),
+            title: const Text('Developer dashboard'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/developer'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('My tests'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/tests'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings_outlined),
+            title: const Text('Admin panel'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/admin'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------
+/// ADMIN
+/// ---------------------------------------------------------------------
+class AdminDashboardScreen extends ConsumerWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pendingAsync = ref.watch(pendingAppsProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin — pending review')),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(pendingAppsProvider),
+        child: pendingAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, st) => ErrorState(
+            message: 'Could not load pending apps',
+            onRetry: () => ref.invalidate(pendingAppsProvider),
+          ),
+          data: (apps) {
+            if (apps.isEmpty) {
+              return ListView(
+                children: const [
+                  SizedBox(height: 80),
+                  EmptyState(
+                    icon: Icons.task_alt_rounded,
+                    title: 'Nothing pending review',
+                    subtitle: 'Submitted apps will show up here.',
+                  ),
+                ],
+              );
+            }
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: apps
+                  .map((app) => AppCard(
+                        app: app,
+                        onTap: () => context.push('/admin/apps/${app.id}'),
+                      ))
+                  .toList(),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class AppReviewScreen extends ConsumerWidget {
+  const AppReviewScreen({super.key, required this.appId});
+
+  final String appId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appAsync = ref.watch(appDetailsProvider(appId));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Review app')),
+      body: appAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, st) => ErrorState(
+          message: 'Could not load this app',
+          onRetry: () => ref.invalidate(appDetailsProvider(appId)),
+        ),
+        data: (app) => ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(app.name, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            Text('by ${app.developerName}',
+                style: TextStyle(color: Colors.grey.shade600)),
+            const SizedBox(height: 12),
+            StatusBadge(status: app.status),
+            const SizedBox(height: 20),
+            Text(app.fullDescription.isNotEmpty
+                ? app.fullDescription
+                : app.shortDescription),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await ref
+                          .read(platformRepositoryProvider)
+                          .approveApp(appId);
+                      ref.invalidate(appDetailsProvider(appId));
+                      ref.invalidate(pendingAppsProvider);
+                      ref.invalidate(myAppsProvider);
+                      if (context.mounted) context.pop();
+                    },
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Approve'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await ref
+                          .read(platformRepositoryProvider)
+                          .rejectApp(appId);
+                      ref.invalidate(appDetailsProvider(appId));
+                      ref.invalidate(pendingAppsProvider);
+                      ref.invalidate(myAppsProvider);
+                      if (context.mounted) context.pop();
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Send back to draft'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
