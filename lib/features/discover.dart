@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+
+import 'package:url_launcher/url_launcher.dart';import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -521,24 +522,32 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
+Future<void> _download(BuildContext context, WidgetRef ref) async {
     final versions = await ref.read(appVersionsProvider(app.id).future);
     final current = versions.where((v) => v.isCurrent).toList();
     final version = current.isNotEmpty ? current.first : null;
 
+    if (version == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No published version to download yet.')),
+      );
+      return;
+    }
+
     await ref.read(appsRepositoryProvider).recordDownload(
           app.id,
-          version?.id,
-          null, // wire in the signed-in user's ID once auth is back
+          version.id,
+          null,
         );
 
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(version != null
-            ? 'Download recorded for v${version.versionName}.'
-            : 'No published version to download yet.'),
-      ),
-    );
+    final uri = Uri.parse(version.apkStoragePath);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open download link.')),
+      );
+    }
   }
-}
