@@ -1,7 +1,7 @@
-
-import 'package:url_launcher/url_launcher.dart';import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/models.dart';
 
@@ -522,7 +522,7 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
-Future<void> _download(BuildContext context, WidgetRef ref) async {
+  Future<void> _download(BuildContext context, WidgetRef ref) async {
     final versions = await ref.read(appVersionsProvider(app.id).future);
     final current = versions.where((v) => v.isCurrent).toList();
     final version = current.isNotEmpty ? current.first : null;
@@ -551,3 +551,4 @@ Future<void> _download(BuildContext context, WidgetRef ref) async {
       );
     }
   }
+}
