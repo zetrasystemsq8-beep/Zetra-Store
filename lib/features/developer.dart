@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -5,9 +6,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/app_core.dart';
 import '../core/models.dart';
 import 'discover.dart';
 
@@ -71,21 +74,29 @@ class DeveloperRepository {
         .update({'screenshot_urls': urls}).eq('id', appId);
   }
 
-  /// Stores the raw storage path, not a public URL — APKs get a
-  /// signed URL generated at download time instead of being exposed
-  /// publicly.
-  Future<String> uploadApk({
+  /// Sends the APK to the Zetra Store Releases Worker, which creates a
+  /// GitHub Release and uploads the APK as an asset there. Returns the
+  /// worker's JSON response, including the public download URL.
+  Future<Map<String, dynamic>> uploadApk({
     required String appId,
     required String versionName,
     required Uint8List bytes,
   }) async {
-    final path = 'apps/$appId/versions/$versionName/app.apk';
-    await _client.storage.from(bucket).uploadBinary(
-          path,
-          bytes,
-          fileOptions: const FileOptions(upsert: true),
-        );
-    return path;
+    final uri = Uri.parse(
+      '${Env.workerUrl}/upload-apk?appId=$appId&versionName=$versionName',
+    );
+    final response = await http.post(
+      uri,
+      headers: {
+        'X-Api-Key': Env.workerApiKey,
+        'Content-Type': 'application/vnd.android.package-archive',
+      },
+      body: bytes,
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Upload failed: ${response.body}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<void> createVersion({
@@ -387,6 +398,10 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
           _showError('Could not read that file. Try again.');
           return;
         }
+        if (file.size > 50 * 1024 * 1024) {
+          _showError('APK is too large (max 50MB on the current plan).');
+          return;
+        }
         setState(() => _apk = file);
       }
     } catch (e) {
@@ -442,18 +457,20 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
         setState(() => _statusText = 'Reading APK...');
         final apkBytes = await File(_apk!.path!).readAsBytes();
 
-        setState(() => _statusText = 'Uploading APK...');
+        setState(() => _statusText = 'Uploading to GitHub Releases...');
         final versionName = _versionName.text.trim();
-        final path = await repo.uploadApk(
+        final result = await repo.uploadApk(
           appId: appId,
           versionName: versionName,
           bytes: apkBytes,
         );
+        final downloadUrl = result['downloadUrl'] as String;
+
         await repo.createVersion(
           appId: appId,
           versionName: versionName,
           versionCode: int.tryParse(_versionCode.text.trim()) ?? 1,
-          apkStoragePath: path,
+          apkStoragePath: downloadUrl,
           releaseNotes: _releaseNotes.text.trim(),
           fileSizeBytes: _apk!.size,
         );
@@ -695,7 +712,13 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
         withData: false,
       );
       if (result != null && result.files.isNotEmpty) {
-        setState(() => _apk = result.files.first);
+        final file = result.files.first;
+        if (file.size > 50 * 1024 * 1024) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('APK is too large (max 50MB on the current plan).')));
+          return;
+        }
+        setState(() => _apk = file);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -722,17 +745,19 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
       final versionName = _versionName.text.trim();
       final apkBytes = await File(_apk!.path!).readAsBytes();
 
-      setState(() => _statusText = 'Uploading APK...');
-      final path = await repo.uploadApk(
+      setState(() => _statusText = 'Uploading to GitHub Releases...');
+      final result = await repo.uploadApk(
         appId: widget.appId,
         versionName: versionName,
         bytes: apkBytes,
       );
+      final downloadUrl = result['downloadUrl'] as String;
+
       await repo.createVersion(
         appId: widget.appId,
         versionName: versionName,
         versionCode: int.tryParse(_versionCode.text.trim()) ?? 1,
-        apkStoragePath: path,
+        apkStoragePath: downloadUrl,
         releaseNotes: _releaseNotes.text.trim(),
         fileSizeBytes: _apk!.size,
       );
