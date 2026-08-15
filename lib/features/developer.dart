@@ -398,10 +398,6 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
           _showError('Could not read that file. Try again.');
           return;
         }
-        if (file.size > 50 * 1024 * 1024) {
-          _showError('APK is too large (max 50MB on the current plan).');
-          return;
-        }
         setState(() => _apk = file);
       }
     } catch (e) {
@@ -712,13 +708,7 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
         withData: false,
       );
       if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        if (file.size > 50 * 1024 * 1024) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('APK is too large (max 50MB on the current plan).')));
-          return;
-        }
-        setState(() => _apk = file);
+        setState(() => _apk = result.files.first);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
