@@ -1,13 +1,15 @@
+import 'dart:io';
 import 'dart:typed_data';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'discover.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/models.dart';
+import 'discover.dart';
 
 /// Placeholder "current developer" until ZetraMail auth is wired back
 /// in. Every app created here is attributed to this ID.
@@ -353,8 +355,8 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
   }
 
   Future<void> _pickIcon() async {
-    final file =
-        await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final file = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (file != null) setState(() => _icon = file);
   }
 
@@ -369,19 +371,26 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
     }
   }
 
+  /// Only grabs the file path here — never loads bytes at pick time.
+  /// Reading a large APK into memory synchronously during the picker
+  /// callback is what was crashing the app.
   Future<void> _pickApk() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['apk'],
-      withData: true,
-    );
-    if (result != null && result.files.isNotEmpty) {
-      final file = result.files.first;
-      if (file.bytes == null) {
-        _showError('Could not read that file. Try again.');
-        return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['apk'],
+        withData: false,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.path == null) {
+          _showError('Could not read that file. Try again.');
+          return;
+        }
+        setState(() => _apk = file);
       }
-      setState(() => _apk = file);
+    } catch (e) {
+      _showError('Could not open file picker: $e');
     }
   }
 
@@ -430,12 +439,15 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
       }
 
       if (_apk != null) {
+        setState(() => _statusText = 'Reading APK...');
+        final apkBytes = await File(_apk!.path!).readAsBytes();
+
         setState(() => _statusText = 'Uploading APK...');
         final versionName = _versionName.text.trim();
         final path = await repo.uploadApk(
           appId: appId,
           versionName: versionName,
-          bytes: _apk!.bytes!,
+          bytes: apkBytes,
         );
         await repo.createVersion(
           appId: appId,
@@ -676,19 +688,24 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
   }
 
   Future<void> _pickApk() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['apk'],
-      withData: true,
-    );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() => _apk = result.files.first);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['apk'],
+        withData: false,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        setState(() => _apk = result.files.first);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open file picker: $e')));
     }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_apk == null || _apk!.bytes == null) {
+    if (_apk == null || _apk!.path == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Choose an APK file first.')));
       return;
@@ -696,17 +713,20 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
 
     setState(() {
       _saving = true;
-      _statusText = 'Uploading APK...';
+      _statusText = 'Reading APK...';
     });
 
     final repo = ref.read(developerRepositoryProvider);
 
     try {
       final versionName = _versionName.text.trim();
+      final apkBytes = await File(_apk!.path!).readAsBytes();
+
+      setState(() => _statusText = 'Uploading APK...');
       final path = await repo.uploadApk(
         appId: widget.appId,
         versionName: versionName,
-        bytes: _apk!.bytes!,
+        bytes: apkBytes,
       );
       await repo.createVersion(
         appId: widget.appId,
