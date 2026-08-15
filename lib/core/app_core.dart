@@ -9,8 +9,6 @@ import '../features/tester_actions.dart';
 /// ---------------------------------------------------------------------
 /// ENVIRONMENT / SUPABASE CONFIG
 /// ---------------------------------------------------------------------
-/// Values come from --dart-define at build time (see your GitHub
-/// Actions workflow), never hardcoded here.
 class Env {
   static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const String supabaseAnonKey =
@@ -76,7 +74,7 @@ class AppTheme {
         ),
       ),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
