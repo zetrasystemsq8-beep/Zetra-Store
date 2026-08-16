@@ -14,10 +14,42 @@ import '../core/app_core.dart';
 import '../core/models.dart';
 import 'discover.dart';
 
-/// Placeholder "current developer" until ZetraMail auth is wired back
-/// in. Every app created here is attributed to this ID.
-const kPlaceholderDeveloperId = 'demo-developer';
-const kPlaceholderDeveloperName = 'You';
+/// ---------------------------------------------------------------------
+/// CURRENT DEVELOPER IDENTITY
+/// ---------------------------------------------------------------------
+class DeveloperProfile {
+  DeveloperProfile({
+    required this.id,
+    required this.username,
+    required this.fullName,
+  });
+
+  final String id;
+  final String username;
+  final String fullName;
+
+  String get displayName => fullName.isNotEmpty ? fullName : username;
+}
+
+/// The signed-in ZetraMail user, as far as Zetra Store cares (id +
+/// display name). Null when nobody's logged in.
+final currentDeveloperProvider = FutureProvider<DeveloperProfile?>((ref) async {
+  final client = ref.watch(supabaseClientProvider);
+  final user = client.auth.currentUser;
+  if (user == null) return null;
+
+  final row = await client
+      .from('profiles')
+      .select('id, username, full_name')
+      .eq('id', user.id)
+      .single();
+
+  return DeveloperProfile(
+    id: row['id'] as String,
+    username: row['username'] as String? ?? '',
+    fullName: row['full_name'] as String? ?? '',
+  );
+});
 
 /// ---------------------------------------------------------------------
 /// REPOSITORY
@@ -30,6 +62,8 @@ class DeveloperRepository {
   static const bucket = 'apps';
 
   Future<String> createApp({
+    required String developerId,
+    required String developerName,
     required String name,
     required String shortDescription,
     required String fullDescription,
@@ -38,8 +72,8 @@ class DeveloperRepository {
     final row = await _client
         .from('apps')
         .insert({
-          'developer_id': kPlaceholderDeveloperId,
-          'developer_name': kPlaceholderDeveloperName,
+          'developer_id': developerId,
+          'developer_name': developerName,
           'name': name,
           'short_description': shortDescription,
           'full_description': fullDescription,
@@ -146,10 +180,10 @@ final developerRepositoryProvider = Provider<DeveloperRepository>((ref) {
   return DeveloperRepository(ref.watch(supabaseClientProvider));
 });
 
-final myAppsProvider = FutureProvider.autoDispose<List<AppModel>>((ref) {
-  return ref
-      .watch(appsRepositoryProvider)
-      .fetchAppsByDeveloper(kPlaceholderDeveloperId);
+final myAppsProvider = FutureProvider.autoDispose<List<AppModel>>((ref) async {
+  final dev = await ref.watch(currentDeveloperProvider.future);
+  if (dev == null) return [];
+  return ref.watch(appsRepositoryProvider).fetchAppsByDeveloper(dev.id);
 });
 
 final appBugReportsProvider = FutureProvider.family
@@ -382,9 +416,6 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
     }
   }
 
-  /// Only grabs the file path here — never loads bytes at pick time.
-  /// Reading a large APK into memory synchronously during the picker
-  /// callback is what was crashing the app.
   Future<void> _pickApk() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -417,6 +448,12 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
       return;
     }
 
+    final dev = await ref.read(currentDeveloperProvider.future);
+    if (dev == null) {
+      _showError('You need to be signed in to create an app.');
+      return;
+    }
+
     setState(() {
       _saving = true;
       _statusText = 'Creating app...';
@@ -426,6 +463,8 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
 
     try {
       final appId = await repo.createApp(
+        developerId: dev.id,
+        developerName: dev.displayName,
         name: _name.text.trim(),
         shortDescription: _shortDescription.text.trim(),
         fullDescription: _fullDescription.text.trim(),
