@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_core.dart';
+
 /// ---------------------------------------------------------------------
 /// ENUMS
 /// ---------------------------------------------------------------------
@@ -442,8 +444,6 @@ class AppsRepository {
     return AppModel.fromMap(row);
   }
 
-  /// Apps belonging to a developer (any status). Pass a developer ID
-  /// once auth (ZetraMail) is wired back in.
   Future<List<AppModel>> fetchAppsByDeveloper(String developerId) async {
     final rows = await _client
         .from('apps')
@@ -505,8 +505,115 @@ final appsRepositoryProvider = Provider<AppsRepository>((ref) {
 });
 
 /// ---------------------------------------------------------------------
-/// SHARED WIDGETS
+/// SHARED BRAND WIDGETS
 /// ---------------------------------------------------------------------
+
+/// A rounded, gradient-filled icon badge with a soft glow — used for
+/// hero/header icons on auth and empty-state screens.
+class GlowIcon extends StatelessWidget {
+  const GlowIcon({super.key, required this.icon, this.size = 84});
+
+  final IconData icon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.26),
+        gradient: ZetraColors.accentGradient,
+        boxShadow: [
+          BoxShadow(
+            color: ZetraColors.accentStart.withOpacity(0.45),
+            blurRadius: 32,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: size * 0.45),
+    );
+  }
+}
+
+/// A full-width gradient button with a soft glow shadow — use in place
+/// of ElevatedButton where extra emphasis is wanted (auth screens,
+/// primary CTAs).
+class GradientButton extends StatelessWidget {
+  const GradientButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.isLoading = false,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onPressed == null;
+    return Opacity(
+      opacity: disabled ? 0.55 : 1,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: ZetraColors.accentGradient,
+          boxShadow: disabled
+              ? []
+              : [
+                  BoxShadow(
+                    color: ZetraColors.accentStart.withOpacity(0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onPressed,
+            child: Center(
+              child: isLoading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (icon != null) ...[
+                          const SizedBox(width: 8),
+                          Icon(icon, color: Colors.white, size: 18),
+                        ],
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AppCard extends StatelessWidget {
   const AppCard({super.key, required this.app, this.onTap});
 
@@ -515,13 +622,23 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? ZetraColors.card : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: isDark ? ZetraColors.cardBorder : Colors.grey.shade200),
+          ),
+          margin: const EdgeInsets.only(bottom: 12),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
@@ -531,11 +648,11 @@ class AppCard extends StatelessWidget {
                         width: 56,
                         height: 56,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => const _AppIconFallback(),
+                        errorBuilder: (c, e, s) => _AppIconFallback(isDark: isDark),
                       )
-                    : const _AppIconFallback(),
+                    : _AppIconFallback(isDark: isDark),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,48 +664,65 @@ class AppCard extends StatelessWidget {
                             app.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontSize: 15),
                           ),
                         ),
                         if (app.isBeta) const _BetaChip(),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       app.developerName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                          TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                      style: TextStyle(
+                        color: isDark ? ZetraColors.textSecondary : Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        Text(
-                          app.category.label,
-                          style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 12),
-                        ),
+                        _CategoryPill(label: app.category.label),
                         const SizedBox(width: 8),
                         Icon(Icons.download_outlined,
-                            size: 14, color: Colors.grey.shade500),
+                            size: 13,
+                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500),
                         const SizedBox(width: 2),
                         Text(
                           '${app.downloadCount}',
                           style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 12),
+                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
                         ),
                         const Spacer(),
                         Text(
                           'v${app.currentVersion}',
                           style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 12),
+                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                width: 30,
+                height: 30,
+                margin: const EdgeInsets.only(top: 2),
+                decoration: BoxDecoration(
+                  color: ZetraColors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_forward_rounded,
+                    color: ZetraColors.accentEnd, size: 15),
               ),
             ],
           ),
@@ -599,16 +733,45 @@ class AppCard extends StatelessWidget {
 }
 
 class _AppIconFallback extends StatelessWidget {
-  const _AppIconFallback();
+  const _AppIconFallback({required this.isDark});
+
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 56,
       height: 56,
-      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-      child:
-          Icon(Icons.apps_rounded, color: Theme.of(context).colorScheme.primary),
+      decoration: BoxDecoration(
+        gradient: ZetraColors.accentGradient.scale(isDark ? 1 : 0.15),
+      ),
+      child: const Icon(Icons.apps_rounded, color: Colors.white),
+    );
+  }
+}
+
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: ZetraColors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: ZetraColors.accentEnd,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
@@ -619,18 +782,18 @@ class _BetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.orange.shade200),
+        color: Colors.orange.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
       ),
-      child: Text(
+      child: const Text(
         'BETA',
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: Colors.orange.shade800,
+          fontWeight: FontWeight.w800,
+          color: Colors.orange,
         ),
       ),
     );
@@ -649,24 +812,23 @@ class StatusBadge extends StatelessWidget {
       case AppStatus.pendingReview:
         return Colors.orange;
       case AppStatus.published:
-        return Colors.green;
+        return const Color(0xFF34D399);
       case AppStatus.unpublished:
-        return Colors.red;
+        return const Color(0xFFFF8A8A);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: _color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         status.label,
-        style:
-            TextStyle(color: _color, fontWeight: FontWeight.w600, fontSize: 12),
+        style: TextStyle(color: _color, fontWeight: FontWeight.w700, fontSize: 12),
       ),
     );
   }
@@ -680,11 +842,11 @@ class SeverityBadge extends StatelessWidget {
   Color get _color {
     switch (severity) {
       case BugSeverity.critical:
-        return Colors.red;
+        return const Color(0xFFFF6B6B);
       case BugSeverity.major:
         return Colors.deepOrange;
       case BugSeverity.minor:
-        return Colors.amber.shade800;
+        return Colors.amber;
       case BugSeverity.cosmetic:
         return Colors.blueGrey;
     }
@@ -693,15 +855,14 @@ class SeverityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: _color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         severity.label,
-        style:
-            TextStyle(color: _color, fontWeight: FontWeight.w600, fontSize: 12),
+        style: TextStyle(color: _color, fontWeight: FontWeight.w700, fontSize: 12),
       ),
     );
   }
@@ -716,13 +877,11 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
       child: Row(
         children: [
           Expanded(
-            child: Text(title,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
           ),
           if (onSeeAll != null)
             TextButton(onPressed: onSeeAll, child: const Text('See all')),
@@ -750,24 +909,38 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: isDark ? ZetraColors.card : Colors.grey.shade100,
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: isDark ? ZetraColors.cardBorder : Colors.grey.shade200),
+            ),
+            child: Icon(icon,
+                size: 30, color: isDark ? ZetraColors.textMuted : Colors.grey.shade400),
+          ),
+          const SizedBox(height: 16),
           Text(title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+              style: Theme.of(context).textTheme.titleSmall),
           if (subtitle != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(subtitle!,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600)),
+                style: TextStyle(
+                    color: isDark ? ZetraColors.textSecondary : Colors.grey.shade600,
+                    height: 1.4)),
           ],
           if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             ElevatedButton(onPressed: onAction, child: Text(actionLabel!)),
           ],
         ],
@@ -789,11 +962,11 @@ class ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline_rounded, size: 48, color: Colors.red.shade300),
-          const SizedBox(height: 12),
+          const Icon(Icons.error_outline_rounded, size: 44, color: ZetraColors.errorSoft),
+          const SizedBox(height: 14),
           Text(message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade700)),
+              style: const TextStyle(color: ZetraColors.textSecondary)),
           if (onRetry != null) ...[
             const SizedBox(height: 16),
             OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
