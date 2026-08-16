@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../features/discover.dart';
 import '../features/developer.dart';
+import '../features/developer_auth.dart';
 import '../features/tester_actions.dart';
 
 /// ---------------------------------------------------------------------
@@ -26,7 +28,7 @@ class Env {
 class AppTheme {
   AppTheme._();
 
-  static const Color _brandSeed = Color(0xFF3457D5); // Zetra blue
+  static const Color _brandSeed = Color(0xFF3457D5);
   static const Color _surface = Color(0xFFF6F7FB);
 
   static ThemeData light = _build(Brightness.light);
@@ -184,6 +186,18 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
+    redirect: (context, state) {
+      final path = state.matchedLocation;
+      const guardedPrefixes = ['/developer', '/my-apps'];
+      const authRoutes = ['/developer-login', '/developer-otp'];
+      final needsAuth = guardedPrefixes.any((p) => path.startsWith(p)) &&
+          !authRoutes.contains(path);
+      final loggedIn = Supabase.instance.client.auth.currentSession != null;
+      if (needsAuth && !loggedIn) {
+        return '/developer-login';
+      }
+      return null;
+    },
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -216,6 +230,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/developer-login',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (c, s) => const DeveloperLoginScreen(),
+      ),
+      GoRoute(
+        path: '/developer-otp',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (c, s) => const DeveloperOtpScreen(),
       ),
       GoRoute(
         path: '/apps/:id',
