@@ -8,6 +8,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/app_core.dart';
 import '../core/models.dart';
 
 /// ---------------------------------------------------------------------
@@ -80,8 +81,11 @@ class HomeScreen extends ConsumerWidget {
     final beta = ref.watch(betaAppsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Zetra Store')),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Zetra Store')),
       body: RefreshIndicator(
+        color: ZetraColors.accentEnd,
+        backgroundColor: ZetraColors.card,
         onRefresh: () async {
           ref.invalidate(featuredAppsProvider);
           ref.invalidate(recentAppsProvider);
@@ -157,7 +161,7 @@ class _AppCarousel extends StatelessWidget {
     return asyncApps.when(
       loading: () => const SizedBox(
         height: 96,
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
       ),
       error: (e, st) =>
           const ErrorState(message: 'Could not load featured apps'),
@@ -203,7 +207,7 @@ class _AppList extends StatelessWidget {
     return asyncApps.when(
       loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
       ),
       error: (e, st) => const ErrorState(message: 'Could not load apps'),
       data: (apps) {
@@ -244,7 +248,8 @@ class DiscoverScreen extends ConsumerWidget {
         : ref.watch(searchResultsProvider(query));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Discover')),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Discover')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -299,7 +304,7 @@ class DiscoverScreen extends ConsumerWidget {
             Expanded(
               child: resultsAsync.when(
                 loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                    const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
                 error: (e, st) => ErrorState(
                   message: 'Could not load apps',
                   onRetry: () {
@@ -348,9 +353,10 @@ class AppDetailsScreen extends ConsumerWidget {
     final appAsync = ref.watch(appDetailsProvider(appId));
 
     return Scaffold(
-      appBar: AppBar(),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent),
       body: appAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
         error: (e, st) => ErrorState(
           message: 'Could not load this app',
           onRetry: () => ref.invalidate(appDetailsProvider(appId)),
@@ -384,13 +390,8 @@ class _AppDetailsBody extends ConsumerWidget {
                   : Container(
                       width: 80,
                       height: 80,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.1),
-                      child: Icon(Icons.apps_rounded,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 32),
+                      decoration: const BoxDecoration(gradient: ZetraColors.accentGradient),
+                      child: const Icon(Icons.apps_rounded, color: Colors.white, size: 32),
                     ),
             ),
             const SizedBox(width: 16),
@@ -402,7 +403,7 @@ class _AppDetailsBody extends ConsumerWidget {
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 4),
                   Text('by ${app.developerName}',
-                      style: TextStyle(color: Colors.grey.shade600)),
+                      style: const TextStyle(color: ZetraColors.textSecondary)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -414,14 +415,14 @@ class _AppDetailsBody extends ConsumerWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
+                            color: Colors.orange.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange.shade200),
+                            border: Border.all(color: Colors.orange.withOpacity(0.4)),
                           ),
                           child: Text('v${app.currentVersion}',
-                              style: TextStyle(
-                                  color: Colors.orange.shade800,
-                                  fontWeight: FontWeight.w600,
+                              style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w700,
                                   fontSize: 12)),
                         ),
                     ],
@@ -432,24 +433,27 @@ class _AppDetailsBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
+        GradientButton(
+          label: 'Download APK',
+          icon: Icons.download_rounded,
           onPressed: () => _download(context, ref),
-          icon: const Icon(Icons.download_rounded),
-          label: const Text('Download APK'),
         ),
         const SizedBox(height: 8),
         Text(
           '${app.fileSizeLabel} • ${app.downloadCount} downloads'
           '${app.minAndroidVersion != null ? ' • Android ${app.minAndroidVersion}+' : ''}',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          style: const TextStyle(color: ZetraColors.textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 24),
         Text('About this app',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(app.fullDescription.isNotEmpty
-            ? app.fullDescription
-            : app.shortDescription),
+        Text(
+          app.fullDescription.isNotEmpty
+              ? app.fullDescription
+              : app.shortDescription,
+          style: const TextStyle(color: ZetraColors.textSecondary, height: 1.5),
+        ),
         const SizedBox(height: 24),
         if (app.screenshotUrls.isNotEmpty) ...[
           Text('Screenshots', style: Theme.of(context).textTheme.titleMedium),
@@ -473,12 +477,13 @@ class _AppDetailsBody extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         versionsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => const Text('Could not load version history'),
+          loading: () => const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => const Text('Could not load version history',
+              style: TextStyle(color: ZetraColors.textSecondary)),
           data: (versions) {
             if (versions.isEmpty) {
-              return Text('No versions uploaded yet.',
-                  style: TextStyle(color: Colors.grey.shade600));
+              return const Text('No versions uploaded yet.',
+                  style: TextStyle(color: ZetraColors.textSecondary));
             }
             return Column(
               children: versions
@@ -488,15 +493,15 @@ class _AppDetailsBody extends ConsumerWidget {
                           v.isCurrent
                               ? Icons.check_circle_rounded
                               : Icons.history_rounded,
-                          color: v.isCurrent ? Colors.green : Colors.grey,
+                          color: v.isCurrent ? const Color(0xFF34D399) : ZetraColors.textMuted,
                         ),
                         title: Text('v${v.versionName}'),
                         subtitle: Text(v.releaseNotes.isNotEmpty
                             ? v.releaseNotes
-                            : 'No release notes'),
+                            : 'No release notes',
+                            style: const TextStyle(color: ZetraColors.textSecondary)),
                         trailing: Text('${v.downloadCount} downloads',
-                            style: TextStyle(
-                                color: Colors.grey.shade600, fontSize: 12)),
+                            style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
                       ))
                   .toList(),
             );
@@ -536,6 +541,8 @@ class _AppDetailsBody extends ConsumerWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: ZetraColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Before you install'),
         content: const SingleChildScrollView(
           child: Column(
@@ -546,6 +553,7 @@ class _AppDetailsBody extends ConsumerWidget {
                 'Android blocks installs from outside the Play Store by '
                 'default — this is normal for any beta-testing app, not '
                 'a problem with this one.',
+                style: TextStyle(color: ZetraColors.textSecondary, height: 1.4),
               ),
               SizedBox(height: 12),
               Text(
@@ -555,6 +563,7 @@ class _AppDetailsBody extends ConsumerWidget {
                 'If you instead see "blocked for your protection":\n'
                 '4. Tap "More details" (small text, easy to miss)\n'
                 '5. Tap "Install anyway"',
+                style: TextStyle(color: ZetraColors.textSecondary, height: 1.4),
               ),
             ],
           ),
@@ -604,11 +613,20 @@ class _AppDetailsBody extends ConsumerWidget {
       builder: (dialogContext) => ValueListenableBuilder<double>(
         valueListenable: progress,
         builder: (context, value, _) => AlertDialog(
+          backgroundColor: ZetraColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Downloading'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              LinearProgressIndicator(value: value > 0 ? value : null),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value > 0 ? value : null,
+                  color: ZetraColors.accentEnd,
+                  backgroundColor: ZetraColors.cardBorder,
+                ),
+              ),
               const SizedBox(height: 12),
               Text(value > 0
                   ? '${(value * 100).toStringAsFixed(0)}%'
