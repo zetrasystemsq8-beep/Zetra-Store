@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/app_core.dart';
 import '../core/models.dart';
 
 /// ---------------------------------------------------------------------
@@ -53,43 +54,8 @@ final developerLoggedInProvider = StreamProvider<bool>((ref) {
 });
 
 /// ---------------------------------------------------------------------
-/// SHARED BRAND HEADER
+/// SHARED AUTH SCREEN CHROME
 /// ---------------------------------------------------------------------
-class _AuthHeader extends StatelessWidget {
-  const _AuthHeader({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: primary.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Icon(icon, color: primary, size: 30),
-        ),
-        const SizedBox(height: 20),
-        Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 6),
-        Text(subtitle, style: TextStyle(color: Colors.grey.shade600, height: 1.4)),
-      ],
-    );
-  }
-}
-
 class _AuthErrorBanner extends StatelessWidget {
   const _AuthErrorBanner({required this.message});
 
@@ -100,19 +66,19 @@ class _AuthErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.08),
+        color: ZetraColors.errorSoft.withOpacity(0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: ZetraColors.errorSoft.withOpacity(0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const Icon(Icons.error_outline_rounded, color: ZetraColors.errorSoft, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Colors.red, fontSize: 13, height: 1.4),
+              style: const TextStyle(color: ZetraColors.errorSoft, fontSize: 13, height: 1.4),
             ),
           ),
         ],
@@ -169,75 +135,79 @@ class _DeveloperLoginScreenState extends ConsumerState<DeveloperLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _AuthHeader(
-                  icon: Icons.rocket_launch_rounded,
-                  title: 'Welcome back',
-                  subtitle: 'Sign in with your Zetra ID to publish apps',
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _identifier,
-                  decoration: const InputDecoration(
-                    labelText: 'Username or Zetra ID',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent),
+      body: GlowBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Center(child: GlowIcon(icon: Icons.rocket_launch_rounded)),
+                  const SizedBox(height: 24),
+                  Text('Welcome back',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Sign in with your Zetra ID to publish apps',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: ZetraColors.textSecondary),
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _password,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscure = !_obscure),
+                  const SizedBox(height: 32),
+                  TextFormField(
+                    controller: _identifier,
+                    decoration: const InputDecoration(
+                      labelText: 'Username or Zetra ID',
+                      prefixIcon: Icon(Icons.person_outline_rounded),
                     ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Required' : null,
-                  onFieldSubmitted: (_) => _submit(),
-                ),
-                if (_error != null) ...[
                   const SizedBox(height: 16),
-                  _AuthErrorBanner(message: _error!),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(Icons.shield_outlined, size: 14, color: Colors.grey.shade500),
-                    const SizedBox(width: 6),
-                    Text('Secured by your Zetra ID',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  TextFormField(
+                    controller: _password,
+                    obscureText: _obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Required' : null,
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    _AuthErrorBanner(message: _error!),
                   ],
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: _loading ? null : _submit,
-                  icon: _loading
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.arrow_forward_rounded, size: 18),
-                  label: Text(_loading ? '' : 'Continue'),
-                ),
-              ],
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.shield_outlined, size: 14, color: ZetraColors.textMuted),
+                      SizedBox(width: 6),
+                      Text('Secured by your Zetra ID',
+                          style: TextStyle(fontSize: 12, color: ZetraColors.textMuted)),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  GradientButton(
+                    label: 'Continue',
+                    icon: Icons.arrow_forward_rounded,
+                    isLoading: _loading,
+                    onPressed: _loading ? null : _submit,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -310,64 +280,67 @@ class _DeveloperOtpScreenState extends ConsumerState<DeveloperOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _AuthHeader(
-                icon: Icons.mark_email_read_outlined,
-                title: 'Check your ZetraMail',
-                subtitle:
-                    'We sent a 6-digit code to your ZetraMail inbox. '
-                    'Enter it below to continue.',
-              ),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _code,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.w700),
-                decoration: const InputDecoration(
-                  counterText: '',
-                  hintText: '000000',
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent),
+      body: GlowBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Center(child: GlowIcon(icon: Icons.mark_email_read_outlined)),
+                const SizedBox(height: 24),
+                Text('Check your ZetraMail',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 6),
+                const Text(
+                  'We sent a 6-digit code to your ZetraMail inbox. '
+                  'Enter it below to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: ZetraColors.textSecondary, height: 1.4),
                 ),
-                onSubmitted: (_) => _verify(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                _AuthErrorBanner(message: _error!),
+                const SizedBox(height: 32),
+                TextField(
+                  controller: _code,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.w800),
+                  decoration: const InputDecoration(
+                    counterText: '',
+                    hintText: '000000',
+                  ),
+                  onSubmitted: (_) => _verify(),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  _AuthErrorBanner(message: _error!),
+                ],
+                const SizedBox(height: 24),
+                GradientButton(
+                  label: 'Verify & continue',
+                  icon: Icons.arrow_forward_rounded,
+                  isLoading: _loading,
+                  onPressed: _loading ? null : _verify,
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: TextButton(
+                    onPressed: _resending ? null : _resend,
+                    child: _resending
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: ZetraColors.accentEnd),
+                          )
+                        : const Text("Didn't get a code? Resend"),
+                  ),
+                ),
               ],
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _loading ? null : _verify,
-                icon: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.arrow_forward_rounded, size: 18),
-                label: Text(_loading ? '' : 'Verify & continue'),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: TextButton(
-                  onPressed: _resending ? null : _resend,
-                  child: _resending
-                      ? const SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text("Didn't get a code? Resend"),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
