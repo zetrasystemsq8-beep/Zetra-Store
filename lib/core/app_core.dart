@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../features/discover.dart';
 import '../features/developer.dart';
@@ -16,6 +17,7 @@ class Env {
   static const String workerUrl = String.fromEnvironment('WORKER_URL');
   static const String workerApiKey =
       String.fromEnvironment('WORKER_API_KEY');
+  static const String adminPin = String.fromEnvironment('ADMIN_PIN');
 }
 
 /// ---------------------------------------------------------------------
@@ -25,73 +27,152 @@ class AppTheme {
   AppTheme._();
 
   static const Color _brandSeed = Color(0xFF3457D5); // Zetra blue
+  static const Color _surface = Color(0xFFF6F7FB);
 
-  static ThemeData light = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.light,
-    colorScheme: ColorScheme.fromSeed(
+  static ThemeData light = _build(Brightness.light);
+  static ThemeData dark = _build(Brightness.dark);
+
+  static ThemeData _build(Brightness brightness) {
+    final isLight = brightness == Brightness.light;
+    final colorScheme = ColorScheme.fromSeed(
       seedColor: _brandSeed,
-      brightness: Brightness.light,
-    ),
-    scaffoldBackgroundColor: const Color(0xFFF7F8FA),
-    appBarTheme: const AppBarTheme(
-      centerTitle: false,
-      elevation: 0,
-      scrolledUnderElevation: 1,
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+      brightness: brightness,
+    );
+
+    final baseText =
+        isLight ? Typography.blackMountainView : Typography.whiteMountainView;
+    final textTheme = GoogleFonts.interTextTheme(baseText).copyWith(
+      headlineSmall: GoogleFonts.manrope(
+        fontWeight: FontWeight.w700,
+        fontSize: 24,
+        letterSpacing: -0.4,
+        color: colorScheme.onSurface,
       ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+      titleLarge: GoogleFonts.manrope(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        color: colorScheme.onSurface,
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: _brandSeed, width: 1.5),
+      titleMedium: GoogleFonts.manrope(
+        fontWeight: FontWeight.w600,
+        color: colorScheme.onSurface,
       ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+      titleSmall: GoogleFonts.manrope(
+        fontWeight: FontWeight.w600,
+        color: colorScheme.onSurface,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        color: colorScheme.onSurfaceVariant,
+        height: 1.4,
+      ),
+      labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w600),
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: colorScheme,
+      textTheme: textTheme,
+      scaffoldBackgroundColor: isLight ? _surface : const Color(0xFF0E1116),
+      appBarTheme: AppBarTheme(
+        centerTitle: false,
         elevation: 0,
+        scrolledUnderElevation: 1,
+        backgroundColor: isLight ? _surface : const Color(0xFF0E1116),
+        titleTextStyle: GoogleFonts.manrope(
+          fontWeight: FontWeight.w700,
+          fontSize: 20,
+          letterSpacing: -0.2,
+          color: colorScheme.onSurface,
+        ),
+        iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isLight ? Colors.white : const Color(0xFF171B22),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+              color: isLight ? Colors.grey.shade300 : Colors.grey.shade800),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+              color: isLight ? Colors.grey.shade300 : Colors.grey.shade800),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: _brandSeed, width: 1.6),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: GoogleFonts.inter(color: Colors.grey.shade500),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          elevation: 0,
+          textStyle: GoogleFonts.inter(
+              fontWeight: FontWeight.w600, letterSpacing: 0.1),
         ),
       ),
-    ),
-    cardTheme: CardThemeData(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          side: BorderSide(
+              color: isLight ? Colors.grey.shade300 : Colors.grey.shade700),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        ),
       ),
-    ),
-  );
-
-  static ThemeData dark = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: _brandSeed,
-      brightness: Brightness.dark,
-    ),
-  );
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: isLight ? Colors.white : const Color(0xFF171B22),
+        margin: const EdgeInsets.only(bottom: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+              color: isLight ? Colors.grey.shade200 : Colors.grey.shade800),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: isLight ? Colors.white : const Color(0xFF171B22),
+        selectedColor: colorScheme.primary.withOpacity(0.12),
+        labelStyle: GoogleFonts.inter(
+            fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+        secondaryLabelStyle:
+            GoogleFonts.inter(fontWeight: FontWeight.w600, color: colorScheme.primary),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(30),
+          side: BorderSide(
+              color: isLight ? Colors.grey.shade300 : Colors.grey.shade700),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: isLight ? Colors.white : const Color(0xFF12151B),
+        indicatorColor: colorScheme.primary.withOpacity(0.14),
+        elevation: 0,
+        labelTextStyle: WidgetStateProperty.all(
+          GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: isLight ? Colors.grey.shade200 : Colors.grey.shade800,
+        space: 1,
+      ),
+    );
+  }
 }
 
 /// ---------------------------------------------------------------------
