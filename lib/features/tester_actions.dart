@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/app_core.dart';
 import '../core/models.dart';
 import 'developer.dart';
 import 'discover.dart';
@@ -92,6 +93,13 @@ final myFeedbackProvider =
 final pendingAppsProvider = FutureProvider.autoDispose<List<AppModel>>((ref) {
   return ref.watch(platformRepositoryProvider).fetchPendingApps();
 });
+
+/// Not persisted — the admin has to re-enter the PIN each fresh app
+/// launch. This is a lightweight stopgap, not real auth: it stops
+/// casual testers from stumbling into approve/reject, not a
+/// determined attacker. Real access control comes back with
+/// ZetraMail auth.
+final adminUnlockedProvider = StateProvider<bool>((ref) => false);
 
 /// ---------------------------------------------------------------------
 /// BUG REPORT FORM
@@ -290,12 +298,12 @@ class _PickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
@@ -585,6 +593,96 @@ class AdminDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final unlocked = ref.watch(adminUnlockedProvider);
+
+    if (!unlocked) {
+      return const _AdminPinGate();
+    }
+
+    return const _AdminPendingList();
+  }
+}
+
+class _AdminPinGate extends ConsumerStatefulWidget {
+  const _AdminPinGate();
+
+  @override
+  ConsumerState<_AdminPinGate> createState() => _AdminPinGateState();
+}
+
+class _AdminPinGateState extends ConsumerState<_AdminPinGate> {
+  final _pin = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  String? _error;
+
+  @override
+  void dispose() {
+    _pin.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    if (_pin.text == Env.adminPin && Env.adminPin.isNotEmpty) {
+      ref.read(adminUnlockedProvider.notifier).state = true;
+    } else {
+      setState(() => _error = 'Incorrect PIN');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin access')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 40, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(height: 16),
+              Text('Enter admin PIN',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                'App review and approval are restricted.',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _pin,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'PIN',
+                  errorText: _error,
+                ),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Enter the PIN' : null,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _submit,
+                child: const Text('Unlock'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminPendingList extends ConsumerWidget {
+  const _AdminPendingList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final pendingAsync = ref.watch(pendingAppsProvider);
 
     return Scaffold(
@@ -633,6 +731,11 @@ class AppReviewScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final unlocked = ref.watch(adminUnlockedProvider);
+    if (!unlocked) {
+      return const _AdminPinGate();
+    }
+
     final appAsync = ref.watch(appDetailsProvider(appId));
 
     return Scaffold(
