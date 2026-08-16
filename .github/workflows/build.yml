@@ -46,7 +46,8 @@ jobs:
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
             --dart-define=WORKER_URL=${{ secrets.WORKER_URL }} \
-            --dart-define=WORKER_API_KEY=${{ secrets.WORKER_API_KEY }}
+            --dart-define=WORKER_API_KEY=${{ secrets.WORKER_API_KEY }} \
+            --dart-define=ADMIN_PIN=${{ secrets.ADMIN_PIN }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
