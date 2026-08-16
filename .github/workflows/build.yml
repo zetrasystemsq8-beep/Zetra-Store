@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,8 +52,19 @@ jobs:
             --dart-define=WORKER_API_KEY=${{ secrets.WORKER_API_KEY }} \
             --dart-define=ADMIN_PIN=${{ secrets.ADMIN_PIN }}
 
-      - name: Upload APK
+      - name: Upload APK (build artifact, for internal testing)
         uses: actions/upload-artifact@v4
         with:
           name: zetra-store-release
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publish public GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: Zetra Store (latest build)
+          body: Automatically published on every push to main.
+          allowUpdates: true
+          replacesArtifacts: true
+          artifacts: build/app/outputs/flutter-apk/app-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
