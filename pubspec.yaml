@@ -23,6 +23,7 @@ dependencies:
   http: ^1.2.2
   path_provider: ^2.1.4
   open_filex: ^4.5.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
