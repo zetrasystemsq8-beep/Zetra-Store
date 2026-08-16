@@ -15,15 +15,13 @@ class DeveloperAuthRepository {
 
   Session? get currentSession => _client.auth.currentSession;
 
-  /// Resolves a username/Zetra ID into its internal auth email, signs
-  /// in, then requests an OTP be sent to the user's ZetraMail inbox.
   Future<void> requestLogin({
     required String identifier,
     required String password,
   }) async {
     final email = await _client.rpc(
       'resolve_login_email',
-      params: {'identifier_input': identifier.trim()},
+      params: {'p_identifier': identifier.trim()},
     ) as String;
 
     await _client.auth.signInWithPassword(email: email, password: password);
@@ -49,13 +47,79 @@ final developerAuthRepositoryProvider = Provider<DeveloperAuthRepository>((ref) 
   return DeveloperAuthRepository(ref.watch(supabaseClientProvider));
 });
 
-/// True once there's a real, persisted Supabase session. Restarting the
-/// app with a session already present skips straight past login/OTP —
-/// OTP is only required at the moment of a fresh sign-in.
 final developerLoggedInProvider = StreamProvider<bool>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return client.auth.onAuthStateChange.map((_) => client.auth.currentSession != null);
 });
+
+/// ---------------------------------------------------------------------
+/// SHARED BRAND HEADER
+/// ---------------------------------------------------------------------
+class _AuthHeader extends StatelessWidget {
+  const _AuthHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: primary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(icon, color: primary, size: 30),
+        ),
+        const SizedBox(height: 20),
+        Text(title, style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 6),
+        Text(subtitle, style: TextStyle(color: Colors.grey.shade600, height: 1.4)),
+      ],
+    );
+  }
+}
+
+class _AuthErrorBanner extends StatelessWidget {
+  const _AuthErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.red, fontSize: 13, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// ---------------------------------------------------------------------
 /// LOGIN
@@ -105,25 +169,27 @@ class _DeveloperLoginScreenState extends ConsumerState<DeveloperLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Developer sign in')),
+      appBar: AppBar(),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Welcome back',
-                    style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 4),
-                Text('Sign in with your Zetra ID to publish apps',
-                    style: TextStyle(color: Colors.grey.shade600)),
-                const SizedBox(height: 24),
+                const _AuthHeader(
+                  icon: Icons.rocket_launch_rounded,
+                  title: 'Welcome back',
+                  subtitle: 'Sign in with your Zetra ID to publish apps',
+                ),
+                const SizedBox(height: 32),
                 TextFormField(
                   controller: _identifier,
                   decoration: const InputDecoration(
-                      labelText: 'Username or Zetra ID'),
+                    labelText: 'Username or Zetra ID',
+                    prefixIcon: Icon(Icons.person_outline_rounded),
+                  ),
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
@@ -133,6 +199,7 @@ class _DeveloperLoginScreenState extends ConsumerState<DeveloperLoginScreen> {
                   obscureText: _obscure,
                   decoration: InputDecoration(
                     labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
                     suffixIcon: IconButton(
                       icon: Icon(_obscure
                           ? Icons.visibility_outlined
@@ -145,19 +212,30 @@ class _DeveloperLoginScreenState extends ConsumerState<DeveloperLoginScreen> {
                   onFieldSubmitted: (_) => _submit(),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 16),
+                  _AuthErrorBanner(message: _error!),
                 ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 14, color: Colors.grey.shade500),
+                    const SizedBox(width: 6),
+                    Text('Secured by your Zetra ID',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  ],
+                ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: _loading ? null : _submit,
-                  child: _loading
+                  icon: _loading
                       ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Continue'),
+                      : const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: Text(_loading ? '' : 'Continue'),
                 ),
               ],
             ),
@@ -232,41 +310,49 @@ class _DeveloperOtpScreenState extends ConsumerState<DeveloperOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Check your ZetraMail')),
+      appBar: AppBar(),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Enter the 6-digit code we sent to your ZetraMail inbox.',
-                style: TextStyle(color: Colors.grey.shade600),
+              const _AuthHeader(
+                icon: Icons.mark_email_read_outlined,
+                title: 'Check your ZetraMail',
+                subtitle:
+                    'We sent a 6-digit code to your ZetraMail inbox. '
+                    'Enter it below to continue.',
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               TextField(
                 controller: _code,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, letterSpacing: 8),
-                decoration: const InputDecoration(counterText: ''),
+                style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.w700),
+                decoration: const InputDecoration(
+                  counterText: '',
+                  hintText: '000000',
+                ),
                 onSubmitted: (_) => _verify(),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 16),
+                _AuthErrorBanner(message: _error!),
               ],
               const SizedBox(height: 24),
-              ElevatedButton(
+              ElevatedButton.icon(
                 onPressed: _loading ? null : _verify,
-                child: _loading
+                icon: _loading
                     ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Verify & continue'),
+                    : const Icon(Icons.arrow_forward_rounded, size: 18),
+                label: Text(_loading ? '' : 'Verify & continue'),
               ),
               const SizedBox(height: 12),
               Center(
