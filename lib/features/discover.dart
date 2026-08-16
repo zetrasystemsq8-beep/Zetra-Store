@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models.dart';
 
@@ -522,6 +527,51 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
+  Future<void> _maybeShowInstallGuide(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('seen_install_guide') ?? false;
+    if (seen || !context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Before you install'),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Android blocks installs from outside the Play Store by '
+                'default — this is normal for any beta-testing app, not '
+                'a problem with this one.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                '1. When the install screen appears, tap "Settings"\n'
+                '2. Turn on "Allow from this source"\n'
+                '3. Go back and tap Install again\n\n'
+                'If you instead see "blocked for your protection":\n'
+                '4. Tap "More details" (small text, easy to miss)\n'
+                '5. Tap "Install anyway"',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await prefs.setBool('seen_install_guide', true);
+              if (context.mounted) Navigator.of(context).pop();
+            },
+            child: const Text('Got it, install'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _download(BuildContext context, WidgetRef ref) async {
     final versions = await ref.read(appVersionsProvider(app.id).future);
     final current = versions.where((v) => v.isCurrent).toList();
@@ -541,14 +591,89 @@ class _AppDetailsBody extends ConsumerWidget {
           null,
         );
 
-    final uri = Uri.parse(version.apkStoragePath);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    if (!context.mounted) return;
+    await _maybeShowInstallGuide(context);
+    if (!context.mounted) return;
+
+    final progress = ValueNotifier<double>(0);
+    var cancelled = false;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => ValueListenableBuilder<double>(
+        valueListenable: progress,
+        builder: (context, value, _) => AlertDialog(
+          title: const Text('Downloading'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: value > 0 ? value : null),
+              const SizedBox(height: 12),
+              Text(value > 0
+                  ? '${(value * 100).toStringAsFixed(0)}%'
+                  : 'Starting...'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(version.apkStoragePath));
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Server returned ${response.statusCode}');
+      }
+
+      final total = response.contentLength ?? 0;
+      var received = 0;
+
+      final dir = await getTemporaryDirectory();
+      final safeName = app.name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final filePath = '${dir.path}/${safeName}_v${version.versionName}.apk';
+      final file = File(filePath);
+      final sink = file.openWrite();
+
+      await for (final chunk in response.stream) {
+        if (cancelled) {
+          await sink.close();
+          return;
+        }
+        sink.add(chunk);
+        received += chunk.length;
+        if (total > 0) {
+          progress.value = received / total;
+        }
+      }
+
+      await sink.close();
+
+      if (cancelled) return;
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open download link.')),
-      );
+
+      Navigator.of(context, rootNavigator: true).pop();
+      await OpenFilex.open(filePath);
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    } finally {
+      client.close();
     }
   }
 }
