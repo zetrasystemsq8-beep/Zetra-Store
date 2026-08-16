@@ -23,156 +23,243 @@ class Env {
 }
 
 /// ---------------------------------------------------------------------
+/// BRAND PALETTE
+/// ---------------------------------------------------------------------
+class ZetraColors {
+  ZetraColors._();
+
+  static const bgTop = Color(0xFF0B0F14);
+  static const bgBottom = Color(0xFF141B23);
+  static const card = Color(0xFF1B2530);
+  static const cardBorder = Color(0xFF2A3844);
+  static const accentStart = Color(0xFF3B82F6);
+  static const accentEnd = Color(0xFF60A5FA);
+  static const textPrimary = Color(0xFFF5F7FA);
+  static const textSecondary = Color(0xFF8B96A3);
+  static const textMuted = Color(0xFF5C6773);
+  static const errorSoft = Color(0xFFFF8A8A);
+
+  static const accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [accentStart, accentEnd],
+  );
+}
+
+/// ---------------------------------------------------------------------
 /// THEME
 /// ---------------------------------------------------------------------
 class AppTheme {
   AppTheme._();
 
-  static const Color _brandSeed = Color(0xFF3457D5);
-  static const Color _surface = Color(0xFFF6F7FB);
+  static ThemeData light = _buildLight();
+  static ThemeData dark = _buildDark();
 
-  static ThemeData light = _build(Brightness.light);
-  static ThemeData dark = _build(Brightness.dark);
-
-  static ThemeData _build(Brightness brightness) {
-    final isLight = brightness == Brightness.light;
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: _brandSeed,
-      brightness: brightness,
-    );
-
-    final baseText =
-        isLight ? Typography.blackMountainView : Typography.whiteMountainView;
-    final textTheme = GoogleFonts.interTextTheme(baseText).copyWith(
+  static ThemeData _buildDark() {
+    final textTheme = GoogleFonts.interTextTheme(Typography.whiteMountainView).copyWith(
       headlineSmall: GoogleFonts.manrope(
-        fontWeight: FontWeight.w700,
-        fontSize: 24,
-        letterSpacing: -0.4,
-        color: colorScheme.onSurface,
+        fontWeight: FontWeight.w800,
+        fontSize: 26,
+        letterSpacing: -0.3,
+        color: ZetraColors.textPrimary,
       ),
       titleLarge: GoogleFonts.manrope(
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
-        color: colorScheme.onSurface,
+        color: ZetraColors.textPrimary,
       ),
       titleMedium: GoogleFonts.manrope(
-        fontWeight: FontWeight.w600,
-        color: colorScheme.onSurface,
+        fontWeight: FontWeight.w700,
+        color: ZetraColors.textPrimary,
       ),
       titleSmall: GoogleFonts.manrope(
         fontWeight: FontWeight.w600,
-        color: colorScheme.onSurface,
+        color: ZetraColors.textPrimary,
       ),
       bodyMedium: GoogleFonts.inter(
-        color: colorScheme.onSurfaceVariant,
-        height: 1.4,
+        color: ZetraColors.textSecondary,
+        height: 1.45,
       ),
-      labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w600),
+      labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w700),
     );
 
     return ThemeData(
       useMaterial3: true,
-      brightness: brightness,
-      colorScheme: colorScheme,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: ZetraColors.bgTop,
+      colorScheme: ColorScheme.dark(
+        primary: ZetraColors.accentEnd,
+        onPrimary: Colors.white,
+        secondary: ZetraColors.accentStart,
+        onSecondary: Colors.white,
+        surface: ZetraColors.card,
+        onSurface: ZetraColors.textPrimary,
+        error: ZetraColors.errorSoft,
+        onError: Colors.white,
+      ),
       textTheme: textTheme,
-      scaffoldBackgroundColor: isLight ? _surface : const Color(0xFF0E1116),
       appBarTheme: AppBarTheme(
-        centerTitle: false,
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 1,
-        backgroundColor: isLight ? _surface : const Color(0xFF0E1116),
+        scrolledUnderElevation: 0,
+        centerTitle: false,
         titleTextStyle: GoogleFonts.manrope(
-          fontWeight: FontWeight.w700,
-          fontSize: 20,
-          letterSpacing: -0.2,
-          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w800,
+          fontSize: 22,
+          color: ZetraColors.textPrimary,
         ),
-        iconTheme: IconThemeData(color: colorScheme.onSurface),
+        iconTheme: const IconThemeData(color: ZetraColors.textPrimary),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isLight ? Colors.white : const Color(0xFF171B22),
+        fillColor: ZetraColors.card,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-              color: isLight ? Colors.grey.shade300 : Colors.grey.shade800),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: ZetraColors.cardBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-              color: isLight ? Colors.grey.shade300 : Colors.grey.shade800),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: ZetraColors.cardBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: _brandSeed, width: 1.6),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: ZetraColors.accentEnd, width: 1.6),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: GoogleFonts.inter(color: Colors.grey.shade500),
+        hintStyle: GoogleFonts.inter(color: ZetraColors.textMuted),
+        labelStyle: GoogleFonts.inter(color: ZetraColors.textSecondary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          backgroundColor: ZetraColors.accentEnd,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: ZetraColors.accentEnd.withOpacity(0.4),
+          minimumSize: const Size.fromHeight(56),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 0,
-          textStyle: GoogleFonts.inter(
-              fontWeight: FontWeight.w600, letterSpacing: 0.1),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15.5),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          side: BorderSide(
-              color: isLight ? Colors.grey.shade300 : Colors.grey.shade700),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          foregroundColor: ZetraColors.textPrimary,
+          minimumSize: const Size.fromHeight(56),
+          side: const BorderSide(color: ZetraColors.cardBorder),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          foregroundColor: ZetraColors.accentEnd,
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
       ),
       cardTheme: CardThemeData(
+        color: ZetraColors.card,
         elevation: 0,
-        color: isLight ? Colors.white : const Color(0xFF171B22),
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-              color: isLight ? Colors.grey.shade200 : Colors.grey.shade800),
+          side: const BorderSide(color: ZetraColors.cardBorder),
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: isLight ? Colors.white : const Color(0xFF171B22),
-        selectedColor: colorScheme.primary.withOpacity(0.12),
-        labelStyle: GoogleFonts.inter(
-            fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-        secondaryLabelStyle:
-            GoogleFonts.inter(fontWeight: FontWeight.w600, color: colorScheme.primary),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
-          side: BorderSide(
-              color: isLight ? Colors.grey.shade300 : Colors.grey.shade700),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        backgroundColor: ZetraColors.card,
+        selectedColor: ZetraColors.accentEnd,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, color: ZetraColors.textSecondary),
+        secondaryLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, color: Colors.white),
+        shape: const StadiumBorder(side: BorderSide(color: ZetraColors.cardBorder)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: isLight ? Colors.white : const Color(0xFF12151B),
-        indicatorColor: colorScheme.primary.withOpacity(0.14),
+        backgroundColor: ZetraColors.bgBottom,
+        indicatorColor: ZetraColors.accentEnd.withOpacity(0.18),
         elevation: 0,
         labelTextStyle: WidgetStateProperty.all(
-          GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+          GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? ZetraColors.accentEnd : ZetraColors.textMuted,
+          );
+        }),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: ZetraColors.accentEnd,
+        foregroundColor: Colors.white,
+        elevation: 6,
+      ),
+      dividerTheme: const DividerThemeData(color: ZetraColors.cardBorder, space: 1),
+    );
+  }
+
+  static ThemeData _buildLight() {
+    final textTheme = GoogleFonts.interTextTheme(Typography.blackMountainView);
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: ZetraColors.accentStart,
+        brightness: Brightness.light,
+      ),
+      textTheme: textTheme,
+      cardTheme: CardThemeData(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.grey.shade200),
         ),
       ),
-      dividerTheme: DividerThemeData(
-        color: isLight ? Colors.grey.shade200 : Colors.grey.shade800,
-        space: 1,
-      ),
+    );
+  }
+}
+
+/// ---------------------------------------------------------------------
+/// GLOW BACKGROUND — applied once behind the whole bottom-nav shell
+/// ---------------------------------------------------------------------
+class GlowBackground extends StatelessWidget {
+  const GlowBackground({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (!isDark) return child;
+
+    return Stack(
+      children: [
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [ZetraColors.bgTop, ZetraColors.bgBottom],
+            ),
+          ),
+        ),
+        Positioned(
+          top: -90,
+          right: -70,
+          child: _blob(220, ZetraColors.accentStart.withOpacity(0.20)),
+        ),
+        Positioned(
+          bottom: -110,
+          left: -80,
+          child: _blob(260, ZetraColors.accentEnd.withOpacity(0.14)),
+        ),
+        child,
+      ],
+    );
+  }
+
+  Widget _blob(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 }
@@ -320,7 +407,9 @@ class ZetraScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      backgroundColor: Colors.transparent,
+      extendBody: true,
+      body: GlowBackground(child: SafeArea(bottom: false, child: navigationShell)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => navigationShell.goBranch(
