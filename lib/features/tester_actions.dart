@@ -9,13 +9,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_core.dart';
 import '../core/models.dart';
 import 'developer.dart';
+import 'developer_auth.dart';
 import 'discover.dart';
 
 /// ---------------------------------------------------------------------
 /// REPOSITORY
 /// ---------------------------------------------------------------------
-const kPlaceholderTesterId = 'demo-tester';
-
 class PlatformRepository {
   PlatformRepository(this._client);
 
@@ -76,6 +75,11 @@ final platformRepositoryProvider = Provider<PlatformRepository>((ref) {
   return PlatformRepository(ref.watch(supabaseClientProvider));
 });
 
+/// The current guest/anonymous tester ID — for now, just a stable
+/// per-session placeholder for anyone who isn't a signed-in developer.
+/// (Testers don't need accounts per your guest-mode decision.)
+const kPlaceholderTesterId = 'guest-tester';
+
 final myBugReportsProvider =
     FutureProvider.autoDispose<List<BugReport>>((ref) {
   return ref
@@ -94,11 +98,6 @@ final pendingAppsProvider = FutureProvider.autoDispose<List<AppModel>>((ref) {
   return ref.watch(platformRepositoryProvider).fetchPendingApps();
 });
 
-/// Not persisted — the admin has to re-enter the PIN each fresh app
-/// launch. This is a lightweight stopgap, not real auth: it stops
-/// casual testers from stumbling into approve/reject, not a
-/// determined attacker. Real access control comes back with
-/// ZetraMail auth.
 final adminUnlockedProvider = StateProvider<bool>((ref) => false);
 
 /// ---------------------------------------------------------------------
@@ -194,89 +193,88 @@ class _BugReportScreenState extends ConsumerState<BugReportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Report a bug')),
-      body: SafeArea(
-        child: AbsorbPointer(
-          absorbing: _saving,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _title,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _description,
-                    decoration:
-                        const InputDecoration(labelText: 'Description'),
-                    maxLines: 4,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<BugSeverity>(
-                    value: _severity,
-                    decoration: const InputDecoration(labelText: 'Severity'),
-                    items: BugSeverity.values
-                        .map((s) =>
-                            DropdownMenuItem(value: s, child: Text(s.label)))
-                        .toList(),
-                    onChanged: (s) => setState(() => _severity = s ?? _severity),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _device,
-                          decoration: const InputDecoration(
-                              labelText: 'Device (optional)'),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Report a bug')),
+      body: GlowBackground(
+        child: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _title,
+                      decoration: const InputDecoration(labelText: 'Title'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _description,
+                      decoration:
+                          const InputDecoration(labelText: 'Description'),
+                      maxLines: 4,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<BugSeverity>(
+                      value: _severity,
+                      dropdownColor: ZetraColors.card,
+                      decoration: const InputDecoration(labelText: 'Severity'),
+                      items: BugSeverity.values
+                          .map((s) =>
+                              DropdownMenuItem(value: s, child: Text(s.label)))
+                          .toList(),
+                      onChanged: (s) => setState(() => _severity = s ?? _severity),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _device,
+                            decoration: const InputDecoration(
+                                labelText: 'Device (optional)'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _androidVersion,
-                          decoration:
-                              const InputDecoration(labelText: 'Android version'),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _androidVersion,
+                            decoration:
+                                const InputDecoration(labelText: 'Android version'),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _steps,
-                    decoration: const InputDecoration(
-                        labelText: 'Steps to reproduce (optional)'),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  _PickerTile(
-                    label: _screenshot == null
-                        ? 'Attach screenshot (optional)'
-                        : _screenshot!.name,
-                    icon: Icons.image_outlined,
-                    onTap: _pickScreenshot,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _saving ? null : _submit,
-                    child: _saving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Submit report'),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _steps,
+                      decoration: const InputDecoration(
+                          labelText: 'Steps to reproduce (optional)'),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    _PickerTile(
+                      label: _screenshot == null
+                          ? 'Attach screenshot (optional)'
+                          : _screenshot!.name,
+                      icon: Icons.image_outlined,
+                      onTap: _pickScreenshot,
+                    ),
+                    const SizedBox(height: 24),
+                    GradientButton(
+                      label: 'Submit report',
+                      isLoading: _saving,
+                      onPressed: _saving ? null : _submit,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -302,15 +300,19 @@ class _PickerTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: ZetraColors.cardBorder),
           borderRadius: BorderRadius.circular(14),
+          color: ZetraColors.card,
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.grey.shade600),
+            Icon(icon, color: ZetraColors.textSecondary),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
-            Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+            Expanded(
+                child: Text(label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: ZetraColors.textPrimary))),
+            const Icon(Icons.chevron_right_rounded, color: ZetraColors.textMuted),
           ],
         ),
       ),
@@ -385,65 +387,63 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Give feedback')),
-      body: SafeArea(
-        child: AbsorbPointer(
-          absorbing: _saving,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('How would you rate this app?',
-                    style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 8),
-                Row(
-                  children: List.generate(5, (i) {
-                    final filled = i < _rating;
-                    return IconButton(
-                      icon: Icon(
-                          filled
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          color: Colors.amber,
-                          size: 32),
-                      onPressed: () => setState(() => _rating = i + 1),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _liked,
-                  decoration: const InputDecoration(
-                      labelText: 'What did you like? (optional)'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _disliked,
-                  decoration: const InputDecoration(
-                      labelText: 'What did you dislike? (optional)'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _suggestions,
-                  decoration:
-                      const InputDecoration(labelText: 'Suggestions (optional)'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _saving ? null : _submit,
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Submit feedback'),
-                ),
-              ],
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Give feedback')),
+      body: GlowBackground(
+        child: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('How would you rate this app?',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(5, (i) {
+                      final filled = i < _rating;
+                      return IconButton(
+                        icon: Icon(
+                            filled
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            color: Colors.amber,
+                            size: 32),
+                        onPressed: () => setState(() => _rating = i + 1),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _liked,
+                    decoration: const InputDecoration(
+                        labelText: 'What did you like? (optional)'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _disliked,
+                    decoration: const InputDecoration(
+                        labelText: 'What did you dislike? (optional)'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _suggestions,
+                    decoration:
+                        const InputDecoration(labelText: 'Suggestions (optional)'),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 24),
+                  GradientButton(
+                    label: 'Submit feedback',
+                    isLoading: _saving,
+                    onPressed: _saving ? null : _submit,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -464,67 +464,76 @@ class MyTestsScreen extends ConsumerWidget {
     final feedbackAsync = ref.watch(myFeedbackProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My tests')),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(myBugReportsProvider);
-          ref.invalidate(myFeedbackProvider);
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const SectionHeader(title: 'Bug reports you submitted'),
-            bugsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, st) =>
-                  const ErrorState(message: 'Could not load your bug reports'),
-              data: (bugs) {
-                if (bugs.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.bug_report_outlined,
-                    title: 'No bug reports yet',
-                    subtitle: 'Reports you submit will show up here.',
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('My tests')),
+      body: GlowBackground(
+        child: RefreshIndicator(
+          color: ZetraColors.accentEnd,
+          backgroundColor: ZetraColors.card,
+          onRefresh: () async {
+            ref.invalidate(myBugReportsProvider);
+            ref.invalidate(myFeedbackProvider);
+          },
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const SectionHeader(title: 'Bug reports you submitted'),
+              bugsAsync.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+                error: (e, st) =>
+                    const ErrorState(message: 'Could not load your bug reports'),
+                data: (bugs) {
+                  if (bugs.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.bug_report_outlined,
+                      title: 'No bug reports yet',
+                      subtitle: 'Reports you submit will show up here.',
+                    );
+                  }
+                  return Column(
+                    children: bugs
+                        .map((b) => Card(
+                              child: ListTile(
+                                title: Text(b.title),
+                                subtitle: Text(b.appName,
+                                    style: const TextStyle(color: ZetraColors.textSecondary)),
+                                trailing: SeverityBadge(severity: b.severity),
+                              ),
+                            ))
+                        .toList(),
                   );
-                }
-                return Column(
-                  children: bugs
-                      .map((b) => Card(
-                            child: ListTile(
-                              title: Text(b.title),
-                              subtitle: Text(b.appName),
-                              trailing: SeverityBadge(severity: b.severity),
-                            ),
-                          ))
-                      .toList(),
-                );
-              },
-            ),
-            const SectionHeader(title: 'Feedback you gave'),
-            feedbackAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, st) =>
-                  const ErrorState(message: 'Could not load your feedback'),
-              data: (items) {
-                if (items.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.rate_review_outlined,
-                    title: 'No feedback yet',
-                    subtitle: 'Feedback you give will show up here.',
+                },
+              ),
+              const SectionHeader(title: 'Feedback you gave'),
+              feedbackAsync.when(
+                loading: () =>
+                    const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+                error: (e, st) =>
+                    const ErrorState(message: 'Could not load your feedback'),
+                data: (items) {
+                  if (items.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.rate_review_outlined,
+                      title: 'No feedback yet',
+                      subtitle: 'Feedback you give will show up here.',
+                    );
+                  }
+                  return Column(
+                    children: items
+                        .map((f) => Card(
+                              child: ListTile(
+                                title: Text(f.appName),
+                                subtitle: Text('${f.rating} / 5',
+                                    style: const TextStyle(color: ZetraColors.textSecondary)),
+                              ),
+                            ))
+                        .toList(),
                   );
-                }
-                return Column(
-                  children: items
-                      .map((f) => Card(
-                            child: ListTile(
-                              title: Text(f.appName),
-                              subtitle: Text('${f.rating} / 5'),
-                            ),
-                          ))
-                      .toList(),
-                );
-              },
-            ),
-          ],
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -534,31 +543,30 @@ class MyTestsScreen extends ConsumerWidget {
 /// ---------------------------------------------------------------------
 /// PROFILE
 /// ---------------------------------------------------------------------
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loggedIn = ref.watch(developerLoggedInProvider).value ?? false;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Profile')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          CircleAvatar(
-            radius: 36,
-            backgroundColor:
-                Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            child: Icon(Icons.person_rounded,
-                size: 36, color: Theme.of(context).colorScheme.primary),
-          ),
-          const SizedBox(height: 12),
-          const Text('Signed-in profile',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          const GlowIcon(icon: Icons.person_rounded, size: 72),
+          const SizedBox(height: 14),
+          Text(loggedIn ? 'Developer account' : 'Browsing as guest',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Real accounts arrive once ZetraMail auth is wired in. For '
-            'now, actions are attributed to a demo account.',
-            style: TextStyle(color: Colors.grey.shade600),
+            loggedIn
+                ? 'Signed in with your Zetra ID.'
+                : 'Sign in with your Zetra ID to publish apps. '
+                  'You can browse and test apps without an account.',
+            style: const TextStyle(color: ZetraColors.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 24),
           ListTile(
@@ -579,6 +587,17 @@ class ProfileScreen extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/admin'),
           ),
+          if (loggedIn) ...[
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded, color: ZetraColors.errorSoft),
+              title: const Text('Sign out', style: TextStyle(color: ZetraColors.errorSoft)),
+              onTap: () async {
+                await ref.read(developerAuthRepositoryProvider).signOut();
+                if (context.mounted) context.go('/');
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -633,44 +652,45 @@ class _AdminPinGateState extends ConsumerState<_AdminPinGate> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin access')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_outline_rounded,
-                  size: 40, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: 16),
-              Text('Enter admin PIN',
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(
-                'App review and approval are restricted.',
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 24),
-              TextFormField(
-                controller: _pin,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'PIN',
-                  errorText: _error,
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Admin access')),
+      body: GlowBackground(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Center(child: GlowIcon(icon: Icons.lock_outline_rounded)),
+                const SizedBox(height: 20),
+                Text('Enter admin PIN',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 6),
+                const Text(
+                  'App review and approval are restricted.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: ZetraColors.textSecondary),
                 ),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Enter the PIN' : null,
-                onFieldSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _submit,
-                child: const Text('Unlock'),
-              ),
-            ],
+                const SizedBox(height: 28),
+                TextFormField(
+                  controller: _pin,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'PIN',
+                    errorText: _error,
+                  ),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Enter the PIN' : null,
+                  onFieldSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 20),
+                GradientButton(label: 'Unlock', onPressed: _submit),
+              ],
+            ),
           ),
         ),
       ),
@@ -686,38 +706,44 @@ class _AdminPendingList extends ConsumerWidget {
     final pendingAsync = ref.watch(pendingAppsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin — pending review')),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(pendingAppsProvider),
-        child: pendingAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => ErrorState(
-            message: 'Could not load pending apps',
-            onRetry: () => ref.invalidate(pendingAppsProvider),
-          ),
-          data: (apps) {
-            if (apps.isEmpty) {
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Admin — pending review')),
+      body: GlowBackground(
+        child: RefreshIndicator(
+          color: ZetraColors.accentEnd,
+          backgroundColor: ZetraColors.card,
+          onRefresh: () async => ref.invalidate(pendingAppsProvider),
+          child: pendingAsync.when(
+            loading: () =>
+                const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+            error: (e, st) => ErrorState(
+              message: 'Could not load pending apps',
+              onRetry: () => ref.invalidate(pendingAppsProvider),
+            ),
+            data: (apps) {
+              if (apps.isEmpty) {
+                return ListView(
+                  children: const [
+                    SizedBox(height: 80),
+                    EmptyState(
+                      icon: Icons.task_alt_rounded,
+                      title: 'Nothing pending review',
+                      subtitle: 'Submitted apps will show up here.',
+                    ),
+                  ],
+                );
+              }
               return ListView(
-                children: const [
-                  SizedBox(height: 80),
-                  EmptyState(
-                    icon: Icons.task_alt_rounded,
-                    title: 'Nothing pending review',
-                    subtitle: 'Submitted apps will show up here.',
-                  ),
-                ],
+                padding: const EdgeInsets.all(16),
+                children: apps
+                    .map((app) => AppCard(
+                          app: app,
+                          onTap: () => context.push('/admin/apps/${app.id}'),
+                        ))
+                    .toList(),
               );
-            }
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: apps
-                  .map((app) => AppCard(
-                        app: app,
-                        onTap: () => context.push('/admin/apps/${app.id}'),
-                      ))
-                  .toList(),
-            );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -739,63 +765,70 @@ class AppReviewScreen extends ConsumerWidget {
     final appAsync = ref.watch(appDetailsProvider(appId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Review app')),
-      body: appAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => ErrorState(
-          message: 'Could not load this app',
-          onRetry: () => ref.invalidate(appDetailsProvider(appId)),
-        ),
-        data: (app) => ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(app.name, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
-            Text('by ${app.developerName}',
-                style: TextStyle(color: Colors.grey.shade600)),
-            const SizedBox(height: 12),
-            StatusBadge(status: app.status),
-            const SizedBox(height: 20),
-            Text(app.fullDescription.isNotEmpty
-                ? app.fullDescription
-                : app.shortDescription),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      await ref
-                          .read(platformRepositoryProvider)
-                          .approveApp(appId);
-                      ref.invalidate(appDetailsProvider(appId));
-                      ref.invalidate(pendingAppsProvider);
-                      ref.invalidate(myAppsProvider);
-                      if (context.mounted) context.pop();
-                    },
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Approve'),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Review app')),
+      body: GlowBackground(
+        child: appAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => ErrorState(
+            message: 'Could not load this app',
+            onRetry: () => ref.invalidate(appDetailsProvider(appId)),
+          ),
+          data: (app) => ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(app.name, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 4),
+              Text('by ${app.developerName}',
+                  style: const TextStyle(color: ZetraColors.textSecondary)),
+              const SizedBox(height: 12),
+              StatusBadge(status: app.status),
+              const SizedBox(height: 20),
+              Text(
+                app.fullDescription.isNotEmpty
+                    ? app.fullDescription
+                    : app.shortDescription,
+                style: const TextStyle(color: ZetraColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await ref
+                            .read(platformRepositoryProvider)
+                            .approveApp(appId);
+                        ref.invalidate(appDetailsProvider(appId));
+                        ref.invalidate(pendingAppsProvider);
+                        ref.invalidate(myAppsProvider);
+                        if (context.mounted) context.pop();
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Approve'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await ref
-                          .read(platformRepositoryProvider)
-                          .rejectApp(appId);
-                      ref.invalidate(appDetailsProvider(appId));
-                      ref.invalidate(pendingAppsProvider);
-                      ref.invalidate(myAppsProvider);
-                      if (context.mounted) context.pop();
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                    label: const Text('Send back to draft'),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await ref
+                            .read(platformRepositoryProvider)
+                            .rejectApp(appId);
+                        ref.invalidate(appDetailsProvider(appId));
+                        ref.invalidate(pendingAppsProvider);
+                        ref.invalidate(myAppsProvider);
+                        if (context.mounted) context.pop();
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Send back to draft'),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
