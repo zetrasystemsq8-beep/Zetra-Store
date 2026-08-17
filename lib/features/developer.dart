@@ -31,8 +31,6 @@ class DeveloperProfile {
   String get displayName => fullName.isNotEmpty ? fullName : username;
 }
 
-/// The signed-in ZetraMail user, as far as Zetra Store cares (id +
-/// display name). Null when nobody's logged in.
 final currentDeveloperProvider = FutureProvider<DeveloperProfile?>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final user = client.auth.currentUser;
@@ -108,9 +106,6 @@ class DeveloperRepository {
         .update({'screenshot_urls': urls}).eq('id', appId);
   }
 
-  /// Sends the APK to the Zetra Store Releases Worker, which creates a
-  /// GitHub Release and uploads the APK as an asset there. Returns the
-  /// worker's JSON response, including the public download URL.
   Future<Map<String, dynamic>> uploadApk({
     required String appId,
     required String versionName,
@@ -207,7 +202,9 @@ class MyAppsScreen extends ConsumerWidget {
     final appsAsync = ref.watch(myAppsProvider);
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
         title: const Text('My apps'),
         actions: [
           IconButton(
@@ -223,9 +220,12 @@ class MyAppsScreen extends ConsumerWidget {
         label: const Text('New app'),
       ),
       body: RefreshIndicator(
+        color: ZetraColors.accentEnd,
+        backgroundColor: ZetraColors.card,
         onRefresh: () async => ref.invalidate(myAppsProvider),
         child: appsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
           error: (e, st) => ErrorState(
             message: 'Could not load your apps',
             onRetry: () => ref.invalidate(myAppsProvider),
@@ -271,64 +271,68 @@ class DeveloperDashboardScreen extends ConsumerWidget {
     final appsAsync = ref.watch(myAppsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Developer dashboard')),
-      body: appsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => ErrorState(
-          message: 'Could not load dashboard',
-          onRetry: () => ref.invalidate(myAppsProvider),
-        ),
-        data: (apps) {
-          final published =
-              apps.where((a) => a.status == AppStatus.published).length;
-          final drafts =
-              apps.where((a) => a.status == AppStatus.draft).length;
-          final totalDownloads =
-              apps.fold<int>(0, (sum, a) => sum + a.downloadCount);
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Developer dashboard')),
+      body: GlowBackground(
+        child: appsAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => ErrorState(
+            message: 'Could not load dashboard',
+            onRetry: () => ref.invalidate(myAppsProvider),
+          ),
+          data: (apps) {
+            final published =
+                apps.where((a) => a.status == AppStatus.published).length;
+            final drafts =
+                apps.where((a) => a.status == AppStatus.draft).length;
+            final totalDownloads =
+                apps.fold<int>(0, (sum, a) => sum + a.downloadCount);
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.6,
-                children: [
-                  _StatCard(label: 'Total apps', value: '${apps.length}'),
-                  _StatCard(label: 'Published', value: '$published'),
-                  _StatCard(label: 'Drafts', value: '$drafts'),
-                  _StatCard(
-                      label: 'Total downloads', value: '$totalDownloads'),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SectionHeader(
-                title: 'Your apps',
-                onSeeAll: () => context.push('/my-apps'),
-              ),
-              if (apps.isEmpty)
-                const EmptyState(
-                  icon: Icons.rocket_launch_outlined,
-                  title: 'No apps yet',
-                  subtitle: 'Create your first app to see stats here.',
-                )
-              else
-                ...apps.take(5).map((app) => AppCard(
-                      app: app,
-                      onTap: () => context.push('/developer/apps/${app.id}'),
-                    )),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () => context.push('/developer/create-app'),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Create app'),
-              ),
-            ],
-          );
-        },
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.6,
+                  children: [
+                    _StatCard(label: 'Total apps', value: '${apps.length}'),
+                    _StatCard(label: 'Published', value: '$published'),
+                    _StatCard(label: 'Drafts', value: '$drafts'),
+                    _StatCard(
+                        label: 'Total downloads', value: '$totalDownloads'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SectionHeader(
+                  title: 'Your apps',
+                  onSeeAll: () => context.push('/my-apps'),
+                ),
+                if (apps.isEmpty)
+                  const EmptyState(
+                    icon: Icons.rocket_launch_outlined,
+                    title: 'No apps yet',
+                    subtitle: 'Create your first app to see stats here.',
+                  )
+                else
+                  ...apps.take(5).map((app) => AppCard(
+                        app: app,
+                        onTap: () => context.push('/developer/apps/${app.id}'),
+                      )),
+                const SizedBox(height: 16),
+                GradientButton(
+                  label: 'Create app',
+                  icon: Icons.add_rounded,
+                  onPressed: () => context.push('/developer/create-app'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -350,11 +354,13 @@ class _StatCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(value,
-                style:
-                    const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontSize: 22)),
             const SizedBox(height: 4),
             Text(label,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                style: const TextStyle(color: ZetraColors.textSecondary, fontSize: 13)),
           ],
         ),
       ),
@@ -542,132 +548,139 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create app')),
-      body: SafeArea(
-        child: AbsorbPointer(
-          absorbing: _saving,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: 'App name'),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _shortDescription,
-                    decoration:
-                        const InputDecoration(labelText: 'Short description'),
-                    maxLength: 120,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  TextFormField(
-                    controller: _fullDescription,
-                    decoration:
-                        const InputDecoration(labelText: 'Full description'),
-                    maxLines: 4,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<AppCategory>(
-                    value: _category,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: AppCategory.values
-                        .map((c) =>
-                            DropdownMenuItem(value: c, child: Text(c.label)))
-                        .toList(),
-                    onChanged: (c) => setState(() => _category = c ?? _category),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('App icon', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  _PickerTile(
-                    label: _icon == null ? 'Choose icon image' : _icon!.name,
-                    icon: Icons.image_outlined,
-                    onTap: _pickIcon,
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Screenshots',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  _PickerTile(
-                    label: _screenshots.isEmpty
-                        ? 'Choose screenshots'
-                        : '${_screenshots.length} screenshot(s) selected',
-                    icon: Icons.photo_library_outlined,
-                    onTap: _pickScreenshots,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _versionName,
-                          decoration: const InputDecoration(labelText: 'Version'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _versionCode,
-                          decoration:
-                              const InputDecoration(labelText: 'Version code'),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _releaseNotes,
-                    decoration: const InputDecoration(labelText: 'Release notes'),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  Text('APK file', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  _PickerTile(
-                    label: _apk == null
-                        ? 'Choose APK'
-                        : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
-                    icon: Icons.android_rounded,
-                    onTap: _pickApk,
-                  ),
-                  const SizedBox(height: 28),
-                  if (_statusText != null) ...[
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Create app')),
+      body: GlowBackground(
+        child: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _name,
+                      decoration: const InputDecoration(labelText: 'App name'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _shortDescription,
+                      decoration:
+                          const InputDecoration(labelText: 'Short description'),
+                      maxLength: 120,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    TextFormField(
+                      controller: _fullDescription,
+                      decoration:
+                          const InputDecoration(labelText: 'Full description'),
+                      maxLines: 4,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<AppCategory>(
+                      value: _category,
+                      dropdownColor: ZetraColors.card,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      items: AppCategory.values
+                          .map((c) =>
+                              DropdownMenuItem(value: c, child: Text(c.label)))
+                          .toList(),
+                      onChanged: (c) => setState(() => _category = c ?? _category),
+                    ),
+                    const SizedBox(height: 20),
+                    Text('App icon', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      label: _icon == null ? 'Choose icon image' : _icon!.name,
+                      icon: Icons.image_outlined,
+                      onTap: _pickIcon,
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Screenshots',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      label: _screenshots.isEmpty
+                          ? 'Choose screenshots'
+                          : '${_screenshots.length} screenshot(s) selected',
+                      icon: Icons.photo_library_outlined,
+                      onTap: _pickScreenshots,
+                    ),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _versionName,
+                            decoration: const InputDecoration(labelText: 'Version'),
+                          ),
                         ),
                         const SizedBox(width: 12),
-                        Text(_statusText!),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _versionCode,
+                            decoration:
+                                const InputDecoration(labelText: 'Version code'),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _releaseNotes,
+                      decoration: const InputDecoration(labelText: 'Release notes'),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    Text('APK file', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    _PickerTile(
+                      label: _apk == null
+                          ? 'Choose APK'
+                          : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
+                      icon: Icons.android_rounded,
+                      onTap: _pickApk,
+                    ),
+                    const SizedBox(height: 28),
+                    if (_statusText != null) ...[
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: ZetraColors.accentEnd),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(_statusText!,
+                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    GradientButton(
+                      label: 'Submit for review',
+                      isLoading: _saving,
+                      onPressed:
+                          _saving ? null : () => _submit(submitForReview: true),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed:
+                          _saving ? null : () => _submit(submitForReview: false),
+                      child: const Text('Save as draft'),
+                    ),
                   ],
-                  ElevatedButton(
-                    onPressed:
-                        _saving ? null : () => _submit(submitForReview: true),
-                    child: const Text('Submit for review'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed:
-                        _saving ? null : () => _submit(submitForReview: false),
-                    child: const Text('Save as draft'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -689,19 +702,23 @@ class _PickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: ZetraColors.cardBorder),
+          borderRadius: BorderRadius.circular(14),
+          color: ZetraColors.card,
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.grey.shade600),
+            Icon(icon, color: ZetraColors.textSecondary),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
-            Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
+            Expanded(
+                child: Text(label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: ZetraColors.textPrimary))),
+            const Icon(Icons.chevron_right_rounded, color: ZetraColors.textMuted),
           ],
         ),
       ),
@@ -815,74 +832,80 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload new version')),
-      body: SafeArea(
-        child: AbsorbPointer(
-          absorbing: _saving,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _versionName,
-                          decoration: const InputDecoration(labelText: 'Version'),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Required' : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _versionCode,
-                          decoration:
-                              const InputDecoration(labelText: 'Version code'),
-                          keyboardType: TextInputType.number,
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty) ? 'Required' : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _releaseNotes,
-                    decoration: const InputDecoration(labelText: 'Release notes'),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  _PickerTile(
-                    label: _apk == null
-                        ? 'Choose APK'
-                        : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
-                    icon: Icons.android_rounded,
-                    onTap: _pickApk,
-                  ),
-                  const SizedBox(height: 24),
-                  if (_statusText != null) ...[
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Upload new version')),
+      body: GlowBackground(
+        child: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _versionName,
+                            decoration: const InputDecoration(labelText: 'Version'),
+                            validator: (v) =>
+                                (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          ),
                         ),
                         const SizedBox(width: 12),
-                        Text(_statusText!),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _versionCode,
+                            decoration:
+                                const InputDecoration(labelText: 'Version code'),
+                            keyboardType: TextInputType.number,
+                            validator: (v) =>
+                                (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _releaseNotes,
+                      decoration: const InputDecoration(labelText: 'Release notes'),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    _PickerTile(
+                      label: _apk == null
+                          ? 'Choose APK'
+                          : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
+                      icon: Icons.android_rounded,
+                      onTap: _pickApk,
+                    ),
+                    const SizedBox(height: 24),
+                    if (_statusText != null) ...[
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: ZetraColors.accentEnd),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(_statusText!,
+                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    GradientButton(
+                      label: 'Upload version',
+                      isLoading: _saving,
+                      onPressed: _saving ? null : _submit,
+                    ),
                   ],
-                  ElevatedButton(
-                    onPressed: _saving ? null : _submit,
-                    child: const Text('Upload version'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -905,14 +928,18 @@ class DeveloperAppDetailScreen extends ConsumerWidget {
     final appAsync = ref.watch(appDetailsProvider(appId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage app')),
-      body: appAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => ErrorState(
-          message: 'Could not load this app',
-          onRetry: () => ref.invalidate(appDetailsProvider(appId)),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Manage app')),
+      body: GlowBackground(
+        child: appAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => ErrorState(
+            message: 'Could not load this app',
+            onRetry: () => ref.invalidate(appDetailsProvider(appId)),
+          ),
+          data: (app) => _DeveloperAppBody(app: app),
         ),
-        data: (app) => _DeveloperAppBody(app: app),
       ),
     );
   }
@@ -939,7 +966,7 @@ class _DeveloperAppBody extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text('v${app.currentVersion} • ${app.category.label}',
-            style: TextStyle(color: Colors.grey.shade600)),
+            style: const TextStyle(color: ZetraColors.textSecondary)),
         const SizedBox(height: 20),
         GridView.count(
           shrinkWrap: true,
@@ -1013,60 +1040,65 @@ class DeveloperAppBugsScreen extends ConsumerWidget {
     final bugsAsync = ref.watch(appBugReportsProvider(appId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bug reports')),
-      body: bugsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => ErrorState(
-          message: 'Could not load bug reports',
-          onRetry: () => ref.invalidate(appBugReportsProvider(appId)),
-        ),
-        data: (bugs) {
-          if (bugs.isEmpty) {
-            return const EmptyState(
-              icon: Icons.bug_report_outlined,
-              title: 'No bug reports yet',
-              subtitle: 'Reports from testers will show up here.',
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: bugs.length,
-            itemBuilder: (context, index) {
-              final bug = bugs[index];
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(bug.title,
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                          SeverityBadge(severity: bug.severity),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(bug.description),
-                      if (bug.stepsToReproduce != null) ...[
-                        const SizedBox(height: 6),
-                        Text('Steps: ${bug.stepsToReproduce}',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                        '${bug.device ?? 'Unknown device'} • ${bug.androidVersion ?? '-'} • ${bug.status.label}',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Bug reports')),
+      body: GlowBackground(
+        child: bugsAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => ErrorState(
+            message: 'Could not load bug reports',
+            onRetry: () => ref.invalidate(appBugReportsProvider(appId)),
+          ),
+          data: (bugs) {
+            if (bugs.isEmpty) {
+              return const EmptyState(
+                icon: Icons.bug_report_outlined,
+                title: 'No bug reports yet',
+                subtitle: 'Reports from testers will show up here.',
               );
-            },
-          );
-        },
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: bugs.length,
+              itemBuilder: (context, index) {
+                final bug = bugs[index];
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(bug.title,
+                                  style: Theme.of(context).textTheme.titleSmall),
+                            ),
+                            SeverityBadge(severity: bug.severity),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(bug.description,
+                            style: const TextStyle(color: ZetraColors.textSecondary)),
+                        if (bug.stepsToReproduce != null) ...[
+                          const SizedBox(height: 6),
+                          Text('Steps: ${bug.stepsToReproduce}',
+                              style: const TextStyle(color: ZetraColors.textMuted, fontSize: 13)),
+                        ],
+                        const SizedBox(height: 8),
+                        Text(
+                          '${bug.device ?? 'Unknown device'} • ${bug.androidVersion ?? '-'} • ${bug.status.label}',
+                          style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1082,63 +1114,70 @@ class DeveloperAppFeedbackScreen extends ConsumerWidget {
     final feedbackAsync = ref.watch(appFeedbackProvider(appId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Feedback')),
-      body: feedbackAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => ErrorState(
-          message: 'Could not load feedback',
-          onRetry: () => ref.invalidate(appFeedbackProvider(appId)),
-        ),
-        data: (items) {
-          if (items.isEmpty) {
-            return const EmptyState(
-              icon: Icons.rate_review_outlined,
-              title: 'No feedback yet',
-              subtitle: 'Tester feedback will show up here.',
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final f = items[index];
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: List.generate(
-                          5,
-                          (i) => Icon(
-                            i < f.rating
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
-                            color: Colors.amber,
-                            size: 18,
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Feedback')),
+      body: GlowBackground(
+        child: feedbackAsync.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+          error: (e, st) => ErrorState(
+            message: 'Could not load feedback',
+            onRetry: () => ref.invalidate(appFeedbackProvider(appId)),
+          ),
+          data: (items) {
+            if (items.isEmpty) {
+              return const EmptyState(
+                icon: Icons.rate_review_outlined,
+                title: 'No feedback yet',
+                subtitle: 'Tester feedback will show up here.',
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final f = items[index];
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: List.generate(
+                            5,
+                            (i) => Icon(
+                              i < f.rating
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              color: Colors.amber,
+                              size: 18,
+                            ),
                           ),
                         ),
-                      ),
-                      if (f.liked != null && f.liked!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text('Liked: ${f.liked}'),
+                        if (f.liked != null && f.liked!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('Liked: ${f.liked}',
+                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                        ],
+                        if (f.disliked != null && f.disliked!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('Disliked: ${f.disliked}',
+                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                        ],
+                        if (f.suggestions != null && f.suggestions!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('Suggestions: ${f.suggestions}',
+                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                        ],
                       ],
-                      if (f.disliked != null && f.disliked!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text('Disliked: ${f.disliked}'),
-                      ],
-                      if (f.suggestions != null && f.suggestions!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text('Suggestions: ${f.suggestions}'),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
