@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,53 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_core.dart';
 import '../core/models.dart';
+import 'developer_auth.dart';
+
+/// ---------------------------------------------------------------------
+/// INSTALLED-APP CHECK (native, via MainActivity.kt)
+/// ---------------------------------------------------------------------
+class InstalledAppInfo {
+  const InstalledAppInfo({required this.installed, required this.versionCode});
+
+  final bool installed;
+  final int versionCode;
+}
+
+class InstalledAppService {
+  InstalledAppService._();
+
+  static const _channel = MethodChannel('zetra_store/package_info');
+
+  static Future<InstalledAppInfo> getInstalledInfo(String packageName) async {
+    if (packageName.trim().isEmpty) {
+      return const InstalledAppInfo(installed: false, versionCode: 0);
+    }
+    try {
+      final result = await _channel.invokeMethod<Map>('getInstalledVersion', {
+        'packageName': packageName,
+      });
+      return InstalledAppInfo(
+        installed: result?['installed'] as bool? ?? false,
+        versionCode: result?['versionCode'] as int? ?? 0,
+      );
+    } catch (_) {
+      return const InstalledAppInfo(installed: false, versionCode: 0);
+    }
+  }
+
+  static Future<void> launchApp(String packageName) async {
+    try {
+      await _channel.invokeMethod('launchApp', {'packageName': packageName});
+    } catch (_) {
+      // Worst case the user just taps again.
+    }
+  }
+}
+
+final installedVersionProvider = FutureProvider.family
+    .autoDispose<InstalledAppInfo, String>((ref, packageName) {
+  return InstalledAppService.getInstalledInfo(packageName);
+});
 
 /// ---------------------------------------------------------------------
 /// PROVIDERS
@@ -70,8 +118,28 @@ final discoverSearchQueryProvider =
 /// ---------------------------------------------------------------------
 /// HOME
 /// ---------------------------------------------------------------------
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  bool _checkedRole = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_checkedRole) return;
+      _checkedRole = true;
+      final seen = await ref.read(roleChoiceMadeProvider.future);
+      if (!seen && mounted) {
+        context.push('/welcome-role');
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -367,13 +435,42 @@ class AppDetailsScreen extends ConsumerWidget {
   }
 }
 
-class _AppDetailsBody extends ConsumerWidget {
+class _AppDetailsBody extends ConsumerStatefulWidget {
   const _AppDetailsBody({required this.app});
 
   final AppModel app;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AppDetailsBody> createState() => _AppDetailsBodyState();
+}
+
+class _AppDetailsBodyState extends ConsumerState<_AppDetailsBody>
+    with WidgetsBindingObserver {
+  AppModel get app => widget.app;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from the Android installer — refresh install status so
+    // the button flips from Install/Update to Open if it worked.
+    if (state == AppLifecycleState.resumed && app.packageName.isNotEmpty) {
+      ref.invalidate(installedVersionProvider(app.packageName));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final versionsAsync = ref.watch(appVersionsProvider(app.id));
 
     return ListView(
@@ -433,11 +530,7 @@ class _AppDetailsBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
-        GradientButton(
-          label: 'Download APK',
-          icon: Icons.download_rounded,
-          onPressed: () => _download(context, ref),
-        ),
+        _InstallButton(app: app, onTrigger: () => _installOrUpdate(context, ref)),
         const SizedBox(height: 8),
         Text(
           '${app.fileSizeLabel} • ${app.downloadCount} downloads'
@@ -581,7 +674,7 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
+  Future<void> _installOrUpdate(BuildContext context, WidgetRef ref) async {
     final versions = await ref.read(appVersionsProvider(app.id).future);
     final current = versions.where((v) => v.isCurrent).toList();
     final version = current.isNotEmpty ? current.first : null;
@@ -682,6 +775,11 @@ class _AppDetailsBody extends ConsumerWidget {
       if (!context.mounted) return;
 
       Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opening installer — finish the install, then return to Zetra Store.'),
+        ),
+      );
       await OpenFilex.open(filePath);
     } catch (e) {
       if (context.mounted) {
@@ -693,5 +791,61 @@ class _AppDetailsBody extends ConsumerWidget {
     } finally {
       client.close();
     }
+  }
+}
+
+class _InstallButton extends ConsumerWidget {
+  const _InstallButton({required this.app, required this.onTrigger});
+
+  final AppModel app;
+  final VoidCallback onTrigger;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (app.packageName.isEmpty) {
+      // Legacy app created before package names were tracked — fall
+      // back to a plain manual download, same as before.
+      return GradientButton(
+        label: 'Download APK',
+        icon: Icons.download_rounded,
+        onPressed: onTrigger,
+      );
+    }
+
+    final installedAsync = ref.watch(installedVersionProvider(app.packageName));
+
+    return installedAsync.when(
+      loading: () => const GradientButton(
+        label: 'Checking...',
+        isLoading: true,
+        onPressed: null,
+      ),
+      error: (_, __) => GradientButton(
+        label: 'Install',
+        icon: Icons.download_rounded,
+        onPressed: onTrigger,
+      ),
+      data: (info) {
+        if (!info.installed) {
+          return GradientButton(
+            label: 'Install',
+            icon: Icons.download_rounded,
+            onPressed: onTrigger,
+          );
+        }
+        if (info.versionCode < app.versionCode) {
+          return GradientButton(
+            label: 'Update',
+            icon: Icons.system_update_alt_rounded,
+            onPressed: onTrigger,
+          );
+        }
+        return OutlinedButton.icon(
+          onPressed: () => InstalledAppService.launchApp(app.packageName),
+          icon: const Icon(Icons.open_in_new_rounded),
+          label: const Text('Open'),
+        );
+      },
+    );
   }
 }
