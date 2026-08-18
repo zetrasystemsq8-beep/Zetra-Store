@@ -142,6 +142,7 @@ class AppModel {
     required this.developerId,
     required this.developerName,
     required this.name,
+    required this.packageName,
     required this.shortDescription,
     required this.fullDescription,
     required this.category,
@@ -162,6 +163,7 @@ class AppModel {
   final String developerId;
   final String developerName;
   final String name;
+  final String packageName;
   final String shortDescription;
   final String fullDescription;
   final AppCategory category;
@@ -191,6 +193,7 @@ class AppModel {
       developerId: map['developer_id'] as String? ?? '',
       developerName: map['developer_name'] as String? ?? 'Unknown developer',
       name: map['name'] as String? ?? '',
+      packageName: map['package_name'] as String? ?? '',
       shortDescription: map['short_description'] as String? ?? '',
       fullDescription: map['full_description'] as String? ?? '',
       category: AppCategory.fromValue(map['category'] as String?),
@@ -215,6 +218,7 @@ class AppModel {
       'developer_id': developerId,
       'developer_name': developerName,
       'name': name,
+      'package_name': packageName,
       'short_description': shortDescription,
       'full_description': fullDescription,
       'category': category.name,
@@ -274,12 +278,13 @@ class BugReport {
     required this.id,
     required this.appId,
     required this.appName,
-    required this.reporterId,
     required this.title,
     required this.description,
     required this.severity,
     required this.status,
     required this.createdAt,
+    this.reporterId,
+    this.reporterName,
     this.device,
     this.androidVersion,
     this.stepsToReproduce,
@@ -289,28 +294,32 @@ class BugReport {
   final String id;
   final String appId;
   final String appName;
-  final String reporterId;
   final String title;
   final String description;
   final BugSeverity severity;
   final BugStatus status;
   final DateTime createdAt;
+  final String? reporterId;
+  final String? reporterName;
   final String? device;
   final String? androidVersion;
   final String? stepsToReproduce;
   final String? screenshotUrl;
+
+  String get reporterLabel => reporterName?.isNotEmpty == true ? reporterName! : 'Anonymous tester';
 
   factory BugReport.fromMap(Map<String, dynamic> map) {
     return BugReport(
       id: map['id'] as String,
       appId: map['app_id'] as String,
       appName: map['app_name'] as String? ?? '',
-      reporterId: map['reporter_id'] as String? ?? '',
       title: map['title'] as String? ?? '',
       description: map['description'] as String? ?? '',
       severity: BugSeverity.fromValue(map['severity'] as String?),
       status: BugStatus.fromValue(map['status'] as String?),
       createdAt: DateTime.parse(map['created_at'] as String),
+      reporterId: map['reporter_id'] as String?,
+      reporterName: map['reporter_name'] as String?,
       device: map['device'] as String?,
       androidVersion: map['android_version'] as String?,
       stepsToReproduce: map['steps_to_reproduce'] as String?,
@@ -323,6 +332,7 @@ class BugReport {
       'app_id': appId,
       'app_name': appName,
       'reporter_id': reporterId,
+      'reporter_name': reporterName,
       'title': title,
       'description': description,
       'severity': severity.name,
@@ -340,9 +350,10 @@ class FeedbackModel {
     required this.id,
     required this.appId,
     required this.appName,
-    required this.userId,
     required this.rating,
     required this.createdAt,
+    this.userId,
+    this.reporterName,
     this.liked,
     this.disliked,
     this.suggestions,
@@ -351,21 +362,25 @@ class FeedbackModel {
   final String id;
   final String appId;
   final String appName;
-  final String userId;
   final int rating;
   final DateTime createdAt;
+  final String? userId;
+  final String? reporterName;
   final String? liked;
   final String? disliked;
   final String? suggestions;
+
+  String get reporterLabel => reporterName?.isNotEmpty == true ? reporterName! : 'Anonymous tester';
 
   factory FeedbackModel.fromMap(Map<String, dynamic> map) {
     return FeedbackModel(
       id: map['id'] as String,
       appId: map['app_id'] as String,
       appName: map['app_name'] as String? ?? '',
-      userId: map['user_id'] as String? ?? '',
       rating: map['rating'] as int? ?? 0,
       createdAt: DateTime.parse(map['created_at'] as String),
+      userId: map['user_id'] as String?,
+      reporterName: map['reporter_name'] as String?,
       liked: map['liked'] as String?,
       disliked: map['disliked'] as String?,
       suggestions: map['suggestions'] as String?,
@@ -377,6 +392,7 @@ class FeedbackModel {
       'app_id': appId,
       'app_name': appName,
       'user_id': userId,
+      'reporter_name': reporterName,
       'rating': rating,
       'liked': liked,
       'disliked': disliked,
@@ -486,6 +502,15 @@ class AppsRepository {
     await _client.from('bug_reports').insert(report.toInsertMap());
   }
 
+  Future<List<BugReport>> fetchBugReportsByReporter(String reporterId) async {
+    final rows = await _client
+        .from('bug_reports')
+        .select()
+        .eq('reporter_id', reporterId)
+        .order('created_at', ascending: false);
+    return rows.map((r) => BugReport.fromMap(r)).toList();
+  }
+
   Future<List<FeedbackModel>> fetchFeedbackForApp(String appId) async {
     final rows = await _client
         .from('feedback')
@@ -498,6 +523,15 @@ class AppsRepository {
   Future<void> submitFeedback(FeedbackModel feedback) async {
     await _client.from('feedback').insert(feedback.toInsertMap());
   }
+
+  Future<List<FeedbackModel>> fetchFeedbackByUser(String userId) async {
+    final rows = await _client
+        .from('feedback')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return rows.map((r) => FeedbackModel.fromMap(r)).toList();
+  }
 }
 
 final appsRepositoryProvider = Provider<AppsRepository>((ref) {
@@ -507,9 +541,6 @@ final appsRepositoryProvider = Provider<AppsRepository>((ref) {
 /// ---------------------------------------------------------------------
 /// SHARED BRAND WIDGETS
 /// ---------------------------------------------------------------------
-
-/// A rounded, gradient-filled icon badge with a soft glow — used for
-/// hero/header icons on auth and empty-state screens.
 class GlowIcon extends StatelessWidget {
   const GlowIcon({super.key, required this.icon, this.size = 84});
 
@@ -537,9 +568,6 @@ class GlowIcon extends StatelessWidget {
   }
 }
 
-/// A full-width gradient button with a soft glow shadow — use in place
-/// of ElevatedButton where extra emphasis is wanted (auth screens,
-/// primary CTAs).
 class GradientButton extends StatelessWidget {
   const GradientButton({
     super.key,
@@ -742,9 +770,7 @@ class _AppIconFallback extends StatelessWidget {
     return Container(
       width: 56,
       height: 56,
-      decoration: BoxDecoration(
-        gradient: ZetraColors.accentGradient.scale(isDark ? 1 : 0.15),
-      ),
+      decoration: const BoxDecoration(gradient: ZetraColors.accentGradient),
       child: const Icon(Icons.apps_rounded, color: Colors.white),
     );
   }
