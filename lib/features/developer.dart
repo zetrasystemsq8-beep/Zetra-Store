@@ -63,6 +63,7 @@ class DeveloperRepository {
     required String developerId,
     required String developerName,
     required String name,
+    required String packageName,
     required String shortDescription,
     required String fullDescription,
     required AppCategory category,
@@ -73,6 +74,7 @@ class DeveloperRepository {
           'developer_id': developerId,
           'developer_name': developerName,
           'name': name,
+          'package_name': packageName,
           'short_description': shortDescription,
           'full_description': fullDescription,
           'category': category.name,
@@ -381,6 +383,7 @@ class CreateAppScreen extends ConsumerStatefulWidget {
 class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _packageName = TextEditingController();
   final _shortDescription = TextEditingController();
   final _fullDescription = TextEditingController();
   final _versionName = TextEditingController(text: '0.1.0');
@@ -397,6 +400,7 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
   @override
   void dispose() {
     _name.dispose();
+    _packageName.dispose();
     _shortDescription.dispose();
     _fullDescription.dispose();
     _versionName.dispose();
@@ -472,6 +476,7 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
         developerId: dev.id,
         developerName: dev.displayName,
         name: _name.text.trim(),
+        packageName: _packageName.text.trim(),
         shortDescription: _shortDescription.text.trim(),
         fullDescription: _fullDescription.text.trim(),
         category: _category,
@@ -566,6 +571,30 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                       decoration: const InputDecoration(labelText: 'App name'),
                       validator: (v) =>
                           (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _packageName,
+                      decoration: const InputDecoration(
+                        labelText: 'Package name (application ID)',
+                        hintText: 'e.g. com.yourcompany.appname',
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Required';
+                        final valid = RegExp(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$')
+                            .hasMatch(v.trim());
+                        return valid
+                            ? null
+                            : 'Use the exact applicationId from this app\'s build.gradle';
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Must exactly match this APK\'s applicationId. Keep using '
+                      'the same package name and signing key in every future '
+                      'version, or updates will fail to install over the '
+                      'existing app.',
+                      style: TextStyle(color: ZetraColors.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -782,13 +811,32 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
 
     setState(() {
       _saving = true;
-      _statusText = 'Reading APK...';
+      _statusText = 'Checking version...';
     });
 
     final repo = ref.read(developerRepositoryProvider);
 
     try {
+      final currentApp = await ref.read(appDetailsProvider(widget.appId).future);
+      final newVersionCode = int.tryParse(_versionCode.text.trim()) ?? 0;
+      if (newVersionCode <= currentApp.versionCode) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Version code must be higher than the current published version (${currentApp.versionCode}) for the update to install correctly.'),
+            ),
+          );
+          setState(() {
+            _saving = false;
+            _statusText = null;
+          });
+        }
+        return;
+      }
+
       final versionName = _versionName.text.trim();
+      setState(() => _statusText = 'Reading APK...');
       final apkBytes = await File(_apk!.path!).readAsBytes();
 
       setState(() => _statusText = 'Uploading to GitHub Releases...');
@@ -802,7 +850,7 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
       await repo.createVersion(
         appId: widget.appId,
         versionName: versionName,
-        versionCode: int.tryParse(_versionCode.text.trim()) ?? 1,
+        versionCode: newVersionCode,
         apkStoragePath: downloadUrl,
         releaseNotes: _releaseNotes.text.trim(),
         fileSizeBytes: _apk!.size,
@@ -967,6 +1015,11 @@ class _DeveloperAppBody extends ConsumerWidget {
         const SizedBox(height: 4),
         Text('v${app.currentVersion} • ${app.category.label}',
             style: const TextStyle(color: ZetraColors.textSecondary)),
+        if (app.packageName.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(app.packageName,
+              style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
+        ],
         const SizedBox(height: 20),
         GridView.count(
           shrinkWrap: true,
@@ -1078,6 +1131,9 @@ class DeveloperAppBugsScreen extends ConsumerWidget {
                             SeverityBadge(severity: bug.severity),
                           ],
                         ),
+                        const SizedBox(height: 4),
+                        Text('From: ${bug.reporterLabel}',
+                            style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
                         const SizedBox(height: 6),
                         Text(bug.description,
                             style: const TextStyle(color: ZetraColors.textSecondary)),
@@ -1143,6 +1199,9 @@ class DeveloperAppFeedbackScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text('From: ${f.reporterLabel}',
+                            style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
+                        const SizedBox(height: 6),
                         Row(
                           children: List.generate(
                             5,
