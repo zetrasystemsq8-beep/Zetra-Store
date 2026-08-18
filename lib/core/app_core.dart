@@ -8,6 +8,7 @@ import '../features/discover.dart';
 import '../features/developer.dart';
 import '../features/developer_auth.dart';
 import '../features/tester_actions.dart';
+import '../features/welcome_role.dart';
 
 /// ---------------------------------------------------------------------
 /// ENVIRONMENT / SUPABASE CONFIG
@@ -317,6 +318,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/welcome-role',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (c, s) => const WelcomeRoleScreen(),
       ),
       GoRoute(
         path: '/developer-login',
