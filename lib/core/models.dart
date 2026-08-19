@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_core.dart';
@@ -402,6 +404,31 @@ class FeedbackModel {
 }
 
 /// ---------------------------------------------------------------------
+/// INSTALL STATE (Install / Update / Open detection)
+/// Lives here (not in a feature file) so both AppCard (below) and the
+/// App Details screen can share the exact same provider instance and
+/// resolution logic.
+/// ---------------------------------------------------------------------
+final installedAppInfoProvider =
+    FutureProvider.family.autoDispose<AppInfo?, String>((ref, packageName) async {
+  if (packageName.isEmpty) return null;
+  try {
+    return await InstalledApps.getAppInfo(packageName);
+  } catch (_) {
+    return null;
+  }
+});
+
+enum InstallState { notInstalled, upToDate, updateAvailable }
+
+InstallState resolveInstallState(AppInfo? installed, int serverVersionCode) {
+  if (installed == null) return InstallState.notInstalled;
+  final installedCode = int.tryParse(installed.versionCode?.toString() ?? '') ?? 0;
+  if (installedCode < serverVersionCode) return InstallState.updateAvailable;
+  return InstallState.upToDate;
+}
+
+/// ---------------------------------------------------------------------
 /// REPOSITORY
 /// ---------------------------------------------------------------------
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
@@ -541,8 +568,8 @@ final appsRepositoryProvider = Provider<AppsRepository>((ref) {
 /// ---------------------------------------------------------------------
 /// SHARED BRAND WIDGETS
 /// All widgets below use context.zetraColors (theme-aware) instead of
-/// the hardcoded ZetraColors.xxx constants, which always resolve to
-/// dark-mode values regardless of the active theme.
+/// hardcoded ZetraColors.xxx constants (which always resolve to
+/// dark-mode values regardless of the active theme).
 /// ---------------------------------------------------------------------
 class GlowIcon extends StatelessWidget {
   const GlowIcon({super.key, required this.icon, this.size = 84});
@@ -647,16 +674,20 @@ class GradientButton extends StatelessWidget {
   }
 }
 
-class AppCard extends StatelessWidget {
+/// App list/grid tile. Now a ConsumerWidget so it can show a live
+/// Update dot without the parent screen needing to wire anything up.
+class AppCard extends ConsumerWidget {
   const AppCard({super.key, required this.app, this.onTap});
 
   final AppModel app;
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.zetraColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final installedAsync = ref.watch(installedAppInfoProvider(app.packageName));
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -673,17 +704,50 @@ class AppCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: app.iconUrl != null
-                    ? Image.network(
-                        app.iconUrl!,
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => _AppIconFallback(colors: colors),
-                      )
-                    : _AppIconFallback(colors: colors),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: app.iconUrl != null
+                        ? Image.network(
+                            app.iconUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => _AppIconFallback(colors: colors),
+                          )
+                        : _AppIconFallback(colors: colors),
+                  ),
+                  installedAsync.maybeWhen(
+                    data: (installed) {
+                      final state = resolveInstallState(installed, app.versionCode);
+                      if (state != InstallState.updateAvailable) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: colors.card,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF34D399),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                ],
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -721,19 +785,39 @@ class AppCard extends StatelessWidget {
                       children: [
                         _CategoryPill(label: app.category.label),
                         const SizedBox(width: 8),
+                        installedAsync.maybeWhen(
+                          data: (installed) {
+                            final state =
+                                resolveInstallState(installed, app.versionCode);
+                            if (state == InstallState.updateAvailable) {
+                              return Text(
+                                'Update',
+                                style: TextStyle(
+                                  color: const Color(0xFF34D399),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              );
+                            }
+                            if (state == InstallState.upToDate) {
+                              return Text(
+                                'Installed',
+                                style: TextStyle(
+                                  color: colors.textMuted,
+                                  fontSize: 11,
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                          orElse: () => const SizedBox.shrink(),
+                        ),
+                        const Spacer(),
                         Icon(Icons.download_outlined,
                             size: 13, color: colors.textMuted),
                         const SizedBox(width: 2),
                         Text(
                           '${app.downloadCount}',
-                          style: TextStyle(
-                            color: colors.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          'v${app.currentVersion}',
                           style: TextStyle(
                             color: colors.textMuted,
                             fontSize: 12,
