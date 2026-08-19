@@ -540,6 +540,9 @@ final appsRepositoryProvider = Provider<AppsRepository>((ref) {
 
 /// ---------------------------------------------------------------------
 /// SHARED BRAND WIDGETS
+/// All widgets below use context.zetraColors (theme-aware) instead of
+/// the hardcoded ZetraColors.xxx constants, which always resolve to
+/// dark-mode values regardless of the active theme.
 /// ---------------------------------------------------------------------
 class GlowIcon extends StatelessWidget {
   const GlowIcon({super.key, required this.icon, this.size = 84});
@@ -549,15 +552,16 @@ class GlowIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * 0.26),
-        gradient: ZetraColors.accentGradient,
+        gradient: colors.accentGradient,
         boxShadow: [
           BoxShadow(
-            color: ZetraColors.accentStart.withOpacity(0.45),
+            color: colors.accentStart.withOpacity(0.45),
             blurRadius: 32,
             spreadRadius: 2,
           ),
@@ -584,6 +588,7 @@ class GradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     final disabled = onPressed == null;
     return Opacity(
       opacity: disabled ? 0.55 : 1,
@@ -591,12 +596,12 @@ class GradientButton extends StatelessWidget {
         height: 56,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          gradient: ZetraColors.accentGradient,
+          gradient: colors.accentGradient,
           boxShadow: disabled
               ? []
               : [
                   BoxShadow(
-                    color: ZetraColors.accentStart.withOpacity(0.35),
+                    color: colors.accentStart.withOpacity(0.35),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -650,6 +655,7 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
@@ -659,10 +665,9 @@ class AppCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: isDark ? ZetraColors.card : Colors.white,
+            color: colors.card,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-                color: isDark ? ZetraColors.cardBorder : Colors.grey.shade200),
+            border: Border.all(color: colors.cardBorder),
           ),
           margin: const EdgeInsets.only(bottom: 12),
           child: Row(
@@ -676,9 +681,9 @@ class AppCard extends StatelessWidget {
                         width: 56,
                         height: 56,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => _AppIconFallback(isDark: isDark),
+                        errorBuilder: (c, e, s) => _AppIconFallback(colors: colors),
                       )
-                    : _AppIconFallback(isDark: isDark),
+                    : _AppIconFallback(colors: colors),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -707,7 +712,7 @@ class AppCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isDark ? ZetraColors.textSecondary : Colors.grey.shade600,
+                        color: colors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -717,13 +722,12 @@ class AppCard extends StatelessWidget {
                         _CategoryPill(label: app.category.label),
                         const SizedBox(width: 8),
                         Icon(Icons.download_outlined,
-                            size: 13,
-                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500),
+                            size: 13, color: colors.textMuted),
                         const SizedBox(width: 2),
                         Text(
                           '${app.downloadCount}',
                           style: TextStyle(
-                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500,
+                            color: colors.textMuted,
                             fontSize: 12,
                           ),
                         ),
@@ -731,7 +735,7 @@ class AppCard extends StatelessWidget {
                         Text(
                           'v${app.currentVersion}',
                           style: TextStyle(
-                            color: isDark ? ZetraColors.textMuted : Colors.grey.shade500,
+                            color: colors.textMuted,
                             fontSize: 12,
                           ),
                         ),
@@ -746,11 +750,11 @@ class AppCard extends StatelessWidget {
                 height: 30,
                 margin: const EdgeInsets.only(top: 2),
                 decoration: BoxDecoration(
-                  color: ZetraColors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
+                  color: colors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_forward_rounded,
-                    color: ZetraColors.accentEnd, size: 15),
+                child: Icon(Icons.arrow_forward_rounded,
+                    color: colors.accentEnd, size: 15),
               ),
             ],
           ),
@@ -761,16 +765,16 @@ class AppCard extends StatelessWidget {
 }
 
 class _AppIconFallback extends StatelessWidget {
-  const _AppIconFallback({required this.isDark});
+  const _AppIconFallback({required this.colors});
 
-  final bool isDark;
+  final ZetraColorPalette colors;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 56,
       height: 56,
-      decoration: const BoxDecoration(gradient: ZetraColors.accentGradient),
+      decoration: BoxDecoration(gradient: colors.accentGradient),
       child: const Icon(Icons.apps_rounded, color: Colors.white),
     );
   }
@@ -783,17 +787,18 @@ class _CategoryPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: ZetraColors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
+        color: colors.accentStart.withOpacity(isDark ? 0.16 : 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: ZetraColors.accentEnd,
+        style: TextStyle(
+          color: colors.accentEnd,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -935,7 +940,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.zetraColors;
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -945,13 +950,11 @@ class EmptyState extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: isDark ? ZetraColors.card : Colors.grey.shade100,
+              color: colors.card,
               shape: BoxShape.circle,
-              border: Border.all(
-                  color: isDark ? ZetraColors.cardBorder : Colors.grey.shade200),
+              border: Border.all(color: colors.cardBorder),
             ),
-            child: Icon(icon,
-                size: 30, color: isDark ? ZetraColors.textMuted : Colors.grey.shade400),
+            child: Icon(icon, size: 30, color: colors.textMuted),
           ),
           const SizedBox(height: 16),
           Text(title,
@@ -961,9 +964,7 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: 6),
             Text(subtitle!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: isDark ? ZetraColors.textSecondary : Colors.grey.shade600,
-                    height: 1.4)),
+                style: TextStyle(color: colors.textSecondary, height: 1.4)),
           ],
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(height: 18),
@@ -983,16 +984,17 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline_rounded, size: 44, color: ZetraColors.errorSoft),
+          Icon(Icons.error_outline_rounded, size: 44, color: colors.errorSoft),
           const SizedBox(height: 14),
           Text(message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: ZetraColors.textSecondary)),
+              style: TextStyle(color: colors.textSecondary)),
           if (onRetry != null) ...[
             const SizedBox(height: 16),
             OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
