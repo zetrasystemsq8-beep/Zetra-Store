@@ -75,6 +75,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.zetraColors;
     final featured = ref.watch(featuredAppsProvider);
     final recent = ref.watch(recentAppsProvider);
     final popular = ref.watch(popularAppsProvider);
@@ -84,8 +85,8 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Zetra Store')),
       body: RefreshIndicator(
-        color: ZetraColors.accentEnd,
-        backgroundColor: ZetraColors.card,
+        color: colors.accentEnd,
+        backgroundColor: colors.card,
         onRefresh: () async {
           ref.invalidate(featuredAppsProvider);
           ref.invalidate(recentAppsProvider);
@@ -158,10 +159,11 @@ class _AppCarousel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     return asyncApps.when(
-      loading: () => const SizedBox(
+      loading: () => SizedBox(
         height: 96,
-        child: Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+        child: Center(child: CircularProgressIndicator(color: colors.accentEnd)),
       ),
       error: (e, st) =>
           const ErrorState(message: 'Could not load featured apps'),
@@ -204,10 +206,11 @@ class _AppList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.zetraColors;
     return asyncApps.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+      loading: () => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator(color: colors.accentEnd)),
       ),
       error: (e, st) => const ErrorState(message: 'Could not load apps'),
       data: (apps) {
@@ -240,6 +243,7 @@ class DiscoverScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.zetraColors;
     final query = ref.watch(discoverSearchQueryProvider);
     final category = ref.watch(discoverCategoryFilterProvider);
 
@@ -304,7 +308,7 @@ class DiscoverScreen extends ConsumerWidget {
             Expanded(
               child: resultsAsync.when(
                 loading: () =>
-                    const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+                    Center(child: CircularProgressIndicator(color: colors.accentEnd)),
                 error: (e, st) => ErrorState(
                   message: 'Could not load apps',
                   onRetry: () {
@@ -350,13 +354,14 @@ class AppDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.zetraColors;
     final appAsync = ref.watch(appDetailsProvider(appId));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(backgroundColor: Colors.transparent),
       body: appAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
+        loading: () => Center(child: CircularProgressIndicator(color: colors.accentEnd)),
         error: (e, st) => ErrorState(
           message: 'Could not load this app',
           onRetry: () => ref.invalidate(appDetailsProvider(appId)),
@@ -374,6 +379,7 @@ class _AppDetailsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.zetraColors;
     final versionsAsync = ref.watch(appVersionsProvider(app.id));
 
     return ListView(
@@ -390,7 +396,7 @@ class _AppDetailsBody extends ConsumerWidget {
                   : Container(
                       width: 80,
                       height: 80,
-                      decoration: const BoxDecoration(gradient: ZetraColors.accentGradient),
+                      decoration: BoxDecoration(gradient: colors.accentGradient),
                       child: const Icon(Icons.apps_rounded, color: Colors.white, size: 32),
                     ),
             ),
@@ -403,7 +409,7 @@ class _AppDetailsBody extends ConsumerWidget {
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 4),
                   Text('by ${app.developerName}',
-                      style: const TextStyle(color: ZetraColors.textSecondary)),
+                      style: TextStyle(color: colors.textSecondary)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -442,7 +448,7 @@ class _AppDetailsBody extends ConsumerWidget {
         Text(
           '${app.fileSizeLabel} • ${app.downloadCount} downloads'
           '${app.minAndroidVersion != null ? ' • Android ${app.minAndroidVersion}+' : ''}',
-          style: const TextStyle(color: ZetraColors.textSecondary, fontSize: 13),
+          style: TextStyle(color: colors.textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 24),
         Text('About this app',
@@ -452,7 +458,7 @@ class _AppDetailsBody extends ConsumerWidget {
           app.fullDescription.isNotEmpty
               ? app.fullDescription
               : app.shortDescription,
-          style: const TextStyle(color: ZetraColors.textSecondary, height: 1.5),
+          style: TextStyle(color: colors.textSecondary, height: 1.5),
         ),
         const SizedBox(height: 24),
         if (app.screenshotUrls.isNotEmpty) ...[
@@ -477,13 +483,13 @@ class _AppDetailsBody extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         versionsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: ZetraColors.accentEnd)),
-          error: (e, st) => const Text('Could not load version history',
-              style: TextStyle(color: ZetraColors.textSecondary)),
+          loading: () => Center(child: CircularProgressIndicator(color: colors.accentEnd)),
+          error: (e, st) => Text('Could not load version history',
+              style: TextStyle(color: colors.textSecondary)),
           data: (versions) {
             if (versions.isEmpty) {
-              return const Text('No versions uploaded yet.',
-                  style: TextStyle(color: ZetraColors.textSecondary));
+              return Text('No versions uploaded yet.',
+                  style: TextStyle(color: colors.textSecondary));
             }
             return Column(
               children: versions
@@ -493,15 +499,15 @@ class _AppDetailsBody extends ConsumerWidget {
                           v.isCurrent
                               ? Icons.check_circle_rounded
                               : Icons.history_rounded,
-                          color: v.isCurrent ? const Color(0xFF34D399) : ZetraColors.textMuted,
+                          color: v.isCurrent ? const Color(0xFF34D399) : colors.textMuted,
                         ),
                         title: Text('v${v.versionName}'),
                         subtitle: Text(v.releaseNotes.isNotEmpty
                             ? v.releaseNotes
                             : 'No release notes',
-                            style: const TextStyle(color: ZetraColors.textSecondary)),
+                            style: TextStyle(color: colors.textSecondary)),
                         trailing: Text('${v.downloadCount} downloads',
-                            style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
+                            style: TextStyle(color: colors.textMuted, fontSize: 12)),
                       ))
                   .toList(),
             );
@@ -543,6 +549,7 @@ class _AppDetailsBody extends ConsumerWidget {
   }
 
   Future<void> _maybeShowInstallGuide(BuildContext context) async {
+    final colors = context.zetraColors;
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('seen_install_guide') ?? false;
     if (seen || !context.mounted) return;
@@ -551,10 +558,10 @@ class _AppDetailsBody extends ConsumerWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: ZetraColors.card,
+        backgroundColor: colors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Before you install'),
-        content: const SingleChildScrollView(
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,9 +570,9 @@ class _AppDetailsBody extends ConsumerWidget {
                 'Android blocks installs from outside the Play Store by '
                 'default — this is normal for any beta-testing app, not '
                 'a problem with this one.',
-                style: TextStyle(color: ZetraColors.textSecondary, height: 1.4),
+                style: TextStyle(color: colors.textSecondary, height: 1.4),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
                 '1. When the install screen appears, tap "Settings"\n'
                 '2. Turn on "Allow from this source"\n'
@@ -573,7 +580,7 @@ class _AppDetailsBody extends ConsumerWidget {
                 'If you instead see "blocked for your protection":\n'
                 '4. Tap "More details" (small text, easy to miss)\n'
                 '5. Tap "Install anyway"',
-                style: TextStyle(color: ZetraColors.textSecondary, height: 1.4),
+                style: TextStyle(color: colors.textSecondary, height: 1.4),
               ),
             ],
           ),
@@ -615,6 +622,7 @@ class _AppDetailsBody extends ConsumerWidget {
       await _maybeShowInstallGuide(context);
       if (!context.mounted) return;
 
+      final colors = context.zetraColors;
       final progress = ValueNotifier<double>(0);
       var cancelled = false;
 
@@ -624,7 +632,7 @@ class _AppDetailsBody extends ConsumerWidget {
         builder: (dialogContext) => ValueListenableBuilder<double>(
           valueListenable: progress,
           builder: (context, value, _) => AlertDialog(
-            backgroundColor: ZetraColors.card,
+            backgroundColor: colors.card,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Downloading'),
             content: Column(
@@ -634,8 +642,8 @@ class _AppDetailsBody extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
                     value: value > 0 ? value : null,
-                    color: ZetraColors.accentEnd,
-                    backgroundColor: ZetraColors.cardBorder,
+                    color: colors.accentEnd,
+                    backgroundColor: colors.cardBorder,
                   ),
                 ),
                 const SizedBox(height: 12),
