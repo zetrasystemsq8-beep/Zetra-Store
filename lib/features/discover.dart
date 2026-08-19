@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,6 +68,26 @@ final discoverCategoryFilterProvider =
     StateProvider.autoDispose<AppCategory?>((ref) => null);
 final discoverSearchQueryProvider =
     StateProvider.autoDispose<String>((ref) => '');
+
+/// Checks whether [packageName] is installed on the device and, if so,
+/// what version code it's at. Returns null if not installed.
+final installedAppInfoProvider =
+    FutureProvider.family.autoDispose<AppInfo?, String>((ref, packageName) async {
+  try {
+    return await InstalledApps.getAppInfo(packageName);
+  } catch (_) {
+    return null;
+  }
+});
+
+enum InstallState { notInstalled, upToDate, updateAvailable }
+
+InstallState _resolveInstallState(AppInfo? installed, int serverVersionCode) {
+  if (installed == null) return InstallState.notInstalled;
+  final installedCode = int.tryParse(installed.versionCode?.toString() ?? '') ?? 0;
+  if (installedCode < serverVersionCode) return InstallState.updateAvailable;
+  return InstallState.upToDate;
+}
 
 /// ---------------------------------------------------------------------
 /// HOME
@@ -381,6 +403,7 @@ class _AppDetailsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.zetraColors;
     final versionsAsync = ref.watch(appVersionsProvider(app.id));
+    final installedAsync = ref.watch(installedAppInfoProvider(app.packageName));
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -439,10 +462,40 @@ class _AppDetailsBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
-        GradientButton(
-          label: 'Download APK',
-          icon: Icons.download_rounded,
-          onPressed: () => _handleDownload(context, ref, null),
+        installedAsync.when(
+          loading: () => GradientButton(
+            label: 'Checking...',
+            isLoading: true,
+            onPressed: null,
+          ),
+          error: (e, st) => GradientButton(
+            label: 'Install APK',
+            icon: Icons.download_rounded,
+            onPressed: () => _handleDownload(context, ref, null),
+          ),
+          data: (installed) {
+            final state = _resolveInstallState(installed, app.versionCode);
+            switch (state) {
+              case InstallState.notInstalled:
+                return GradientButton(
+                  label: 'Install APK',
+                  icon: Icons.download_rounded,
+                  onPressed: () => _handleDownload(context, ref, null),
+                );
+              case InstallState.updateAvailable:
+                return GradientButton(
+                  label: 'Update to v${app.currentVersion}',
+                  icon: Icons.system_update_rounded,
+                  onPressed: () => _handleDownload(context, ref, null),
+                );
+              case InstallState.upToDate:
+                return GradientButton(
+                  label: 'Open App',
+                  icon: Icons.open_in_new_rounded,
+                  onPressed: () => InstalledApps.startApp(app.packageName),
+                );
+            }
+          },
         ),
         const SizedBox(height: 8),
         Text(
@@ -479,14 +532,8 @@ class _AppDetailsBody extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
         ],
-        Row(
-          children: [
-            Expanded(
-              child: Text('Version history',
-                  style: Theme.of(context).textTheme.titleMedium),
-            ),
-          ],
-        ),
+        Text('Version history',
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 2),
         Text('Tap any version below to install it',
             style: TextStyle(color: colors.textMuted, fontSize: 12)),
@@ -571,8 +618,9 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
-  /// Tapping a version in history: if it's already current, just install
-  /// as normal. If it's an older version, confirm before rolling back.
+  /// Tapping a version in history: if it's already current, install
+  /// through the normal install/update flow. Older version → confirm
+  /// rollback first, since it downgrades what's on the device.
   void _handleVersionTap(BuildContext context, WidgetRef ref, AppVersion version) {
     if (version.isCurrent) {
       _handleDownload(context, ref, version);
@@ -611,7 +659,11 @@ class _AppDetailsBody extends ConsumerWidget {
   }
 
   void _handleDownload(BuildContext context, WidgetRef ref, AppVersion? specificVersion) {
-    _download(context, ref, specificVersion).catchError((e, st) {
+    _download(context, ref, specificVersion).then((_) {
+      // Refresh the install-state check after any install/update/rollback
+      // so the button (Install/Open/Update) reflects reality immediately.
+      ref.invalidate(installedAppInfoProvider(app.packageName));
+    }).catchError((e, st) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Download error: $e')),
@@ -671,8 +723,9 @@ class _AppDetailsBody extends ConsumerWidget {
   }
 
   /// Downloads and installs [specificVersion] if provided, otherwise the
-  /// current published version. One method powers both the main
-  /// "Download APK" button and rollback installs from Version History.
+  /// current published version. Powers Install, Update, and Rollback —
+  /// Android handles the install-vs-replace logic automatically based on
+  /// the package name and signing key already matching.
   Future<void> _download(
       BuildContext context, WidgetRef ref, AppVersion? specificVersion) async {
     try {
