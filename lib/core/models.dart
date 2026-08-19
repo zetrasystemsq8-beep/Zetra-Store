@@ -413,7 +413,7 @@ final installedAppInfoProvider =
     FutureProvider.family.autoDispose<AppInfo?, String>((ref, packageName) async {
   if (packageName.isEmpty) return null;
   try {
-    return await InstalledApps.getAppInfo(packageName, false);
+    return await InstalledApps.getAppInfo(packageName);
   } catch (_) {
     return null;
   }
