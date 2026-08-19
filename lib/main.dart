@@ -67,7 +67,7 @@ class _UpdateGateState extends State<UpdateGate> {
       final currentVersion = packageInfo.version; // e.g. "0.1.0"
 
       final response = await Supabase.instance.client
-          .from('app_config')
+          .from('zetra_store_app_config')
           .select('latest_version, release_date, update_url')
           .limit(1)
           .maybeSingle();
