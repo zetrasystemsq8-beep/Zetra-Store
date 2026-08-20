@@ -587,6 +587,12 @@ class ProfileScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => context.push('/admin'),
           ),
+          ListTile(
+            leading: const Icon(Icons.support_agent_rounded),
+            title: const Text('Contact us'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => context.push('/contact'),
+          ),
           if (loggedIn) ...[
             const Divider(),
             ListTile(
