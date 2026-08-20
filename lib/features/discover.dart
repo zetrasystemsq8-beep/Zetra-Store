@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:installed_apps/installed_apps.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_core.dart';
+import '../core/apk_installer.dart';
 import '../core/models.dart';
 
 /// ---------------------------------------------------------------------
@@ -68,9 +68,8 @@ final discoverCategoryFilterProvider =
 final discoverSearchQueryProvider =
     StateProvider.autoDispose<String>((ref) => '');
 
-// NOTE: installedAppInfoProvider, InstallState, and resolveInstallState
-// now live in core/models.dart (imported above) so AppCard can share
-// them too. Do NOT redefine them here.
+// installedAppInfoProvider, InstallState, resolveInstallState live in
+// core/models.dart — do not redefine them here.
 
 /// ---------------------------------------------------------------------
 /// HOME
@@ -601,9 +600,6 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
-  /// Tapping a version in history: if it's already current, install
-  /// through the normal install/update flow. Older version → confirm
-  /// rollback first, since it downgrades what's on the device.
   void _handleVersionTap(BuildContext context, WidgetRef ref, AppVersion version) {
     if (version.isCurrent) {
       _handleDownload(context, ref, version);
@@ -653,54 +649,72 @@ class _AppDetailsBody extends ConsumerWidget {
     });
   }
 
-  Future<void> _maybeShowInstallGuide(BuildContext context) async {
+  Future<bool> _maybeShowInstallGuide(BuildContext context) async {
     final colors = context.zetraColors;
     final prefs = await SharedPreferences.getInstance();
-    final seen = prefs.getBool('seen_install_guide') ?? false;
-    if (seen || !context.mounted) return;
+    final seen = prefs.getBool('seen_install_guide_v2') ?? false;
+    if (seen || !context.mounted) return true;
 
-    await showDialog<void>(
+    final proceed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: colors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Before you install'),
+        title: Row(
+          children: [
+            Icon(Icons.shield_outlined, color: colors.accentEnd),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Almost there')),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Android blocks installs from outside the Play Store by '
-                'default — this is normal for any beta-testing app, not '
-                'a problem with this one.',
-                style: TextStyle(color: colors.textSecondary, height: 1.4),
+                'In a moment, Android will ask if it\'s okay to install '
+                'this app. This happens for every app that doesn\'t come '
+                'from the Play Store — it\'s completely normal and just '
+                'means Android wants your final "yes."',
+                style: TextStyle(color: colors.textSecondary, height: 1.5),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Text(
-                '1. When the install screen appears, tap "Settings"\n'
-                '2. Turn on "Allow from this source"\n'
-                '3. Go back and tap Install again\n\n'
-                'If you instead see "blocked for your protection":\n'
-                '4. Tap "More details" (small text, easy to miss)\n'
-                '5. Tap "Install anyway"',
-                style: TextStyle(color: colors.textSecondary, height: 1.4),
+                'Just tap "Install" when you see it — that\'s it.',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'You\'ll only see this Zetra explanation once — after this, '
+                'installs and updates go straight through.',
+                style: TextStyle(color: colors.textMuted, fontSize: 12, height: 1.4),
               ),
             ],
           ),
         ),
         actions: [
           TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
             onPressed: () async {
-              await prefs.setBool('seen_install_guide', true);
-              if (context.mounted) Navigator.of(context).pop();
+              await prefs.setBool('seen_install_guide_v2', true);
+              if (context.mounted) Navigator.of(context).pop(true);
             },
-            child: const Text('Got it, install'),
+            child: const Text('Got it, continue'),
           ),
         ],
       ),
     );
+
+    return proceed ?? false;
   }
 
   Future<void> _download(
@@ -724,14 +738,16 @@ class _AppDetailsBody extends ConsumerWidget {
 
       final versionToInstall = version;
 
+      if (!context.mounted) return;
+      final proceed = await _maybeShowInstallGuide(context);
+      if (!proceed || !context.mounted) return;
+
       await ref.read(appsRepositoryProvider).recordDownload(
             app.id,
             versionToInstall.id,
             null,
           );
 
-      if (!context.mounted) return;
-      await _maybeShowInstallGuide(context);
       if (!context.mounted) return;
 
       final colors = context.zetraColors;
@@ -814,7 +830,8 @@ class _AppDetailsBody extends ConsumerWidget {
         if (!context.mounted) return;
 
         Navigator.of(context, rootNavigator: true).pop();
-        await OpenFilex.open(filePath);
+
+        await ApkInstaller.install(filePath);
       } finally {
         client.close();
       }
