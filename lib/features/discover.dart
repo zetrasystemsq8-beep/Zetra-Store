@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:installed_apps/installed_apps.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_core.dart';
 import '../core/apk_installer.dart';
@@ -385,7 +386,9 @@ class _AppDetailsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.zetraColors;
     final versionsAsync = ref.watch(appVersionsProvider(app.id));
-    final installedAsync = ref.watch(installedAppInfoProvider(app.packageName));
+    final installedAsync = app.isWebApp
+        ? null
+        : ref.watch(installedAppInfoProvider(app.packageName));
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -421,7 +424,29 @@ class _AppDetailsBody extends ConsumerWidget {
                     runSpacing: 4,
                     children: [
                       StatusBadge(status: app.status),
-                      if (app.isBeta)
+                      if (app.isWebApp)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colors.accentStart.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.language_rounded,
+                                  size: 12, color: colors.accentEnd),
+                              const SizedBox(width: 4),
+                              Text('Web app',
+                                  style: TextStyle(
+                                      color: colors.accentEnd,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      if (!app.isWebApp && app.isBeta)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -444,47 +469,69 @@ class _AppDetailsBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
-        installedAsync.when(
-          loading: () => const GradientButton(
-            label: 'Checking...',
-            isLoading: true,
-            onPressed: null,
+        if (app.isWebApp)
+          GradientButton(
+            label: 'Open Website',
+            icon: Icons.language_rounded,
+            onPressed: () async {
+              final uri = Uri.tryParse(app.webUrl ?? '');
+              if (uri == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('This app has no website link set.')),
+                );
+                return;
+              }
+              final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open the website.')),
+                );
+              }
+            },
+          )
+        else
+          installedAsync!.when(
+            loading: () => const GradientButton(
+              label: 'Checking...',
+              isLoading: true,
+              onPressed: null,
+            ),
+            error: (e, st) => GradientButton(
+              label: 'Install APK',
+              icon: Icons.download_rounded,
+              onPressed: () => _handleDownload(context, ref, null),
+            ),
+            data: (installed) {
+              final state = resolveInstallState(installed, app.versionCode);
+              switch (state) {
+                case InstallState.notInstalled:
+                  return GradientButton(
+                    label: 'Install APK',
+                    icon: Icons.download_rounded,
+                    onPressed: () => _handleDownload(context, ref, null),
+                  );
+                case InstallState.updateAvailable:
+                  return GradientButton(
+                    label: 'Update to v${app.currentVersion}',
+                    icon: Icons.system_update_rounded,
+                    onPressed: () => _handleDownload(context, ref, null),
+                  );
+                case InstallState.upToDate:
+                  return GradientButton(
+                    label: 'Open App',
+                    icon: Icons.open_in_new_rounded,
+                    onPressed: () => InstalledApps.startApp(app.packageName),
+                  );
+              }
+            },
           ),
-          error: (e, st) => GradientButton(
-            label: 'Install APK',
-            icon: Icons.download_rounded,
-            onPressed: () => _handleDownload(context, ref, null),
-          ),
-          data: (installed) {
-            final state = resolveInstallState(installed, app.versionCode);
-            switch (state) {
-              case InstallState.notInstalled:
-                return GradientButton(
-                  label: 'Install APK',
-                  icon: Icons.download_rounded,
-                  onPressed: () => _handleDownload(context, ref, null),
-                );
-              case InstallState.updateAvailable:
-                return GradientButton(
-                  label: 'Update to v${app.currentVersion}',
-                  icon: Icons.system_update_rounded,
-                  onPressed: () => _handleDownload(context, ref, null),
-                );
-              case InstallState.upToDate:
-                return GradientButton(
-                  label: 'Open App',
-                  icon: Icons.open_in_new_rounded,
-                  onPressed: () => InstalledApps.startApp(app.packageName),
-                );
-            }
-          },
-        ),
         const SizedBox(height: 8),
-        Text(
-          '${app.fileSizeLabel} • ${app.downloadCount} downloads'
-          '${app.minAndroidVersion != null ? ' • Android ${app.minAndroidVersion}+' : ''}',
-          style: TextStyle(color: colors.textSecondary, fontSize: 13),
-        ),
+        if (!app.isWebApp)
+          Text(
+            '${app.fileSizeLabel} • ${app.downloadCount} downloads'
+            '${app.minAndroidVersion != null ? ' • Android ${app.minAndroidVersion}+' : ''}',
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
+          ),
         const SizedBox(height: 24),
         Text('About this app',
             style: Theme.of(context).textTheme.titleMedium),
@@ -514,68 +561,70 @@ class _AppDetailsBody extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
         ],
-        Text('Version history',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 2),
-        Text('Tap any version below to install it',
-            style: TextStyle(color: colors.textMuted, fontSize: 12)),
-        const SizedBox(height: 8),
-        versionsAsync.when(
-          loading: () => Center(child: CircularProgressIndicator(color: colors.accentEnd)),
-          error: (e, st) => Text('Could not load version history',
-              style: TextStyle(color: colors.textSecondary)),
-          data: (versions) {
-            if (versions.isEmpty) {
-              return Text('No versions uploaded yet.',
-                  style: TextStyle(color: colors.textSecondary));
-            }
-            return Column(
-              children: versions
-                  .map((v) => InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => _handleVersionTap(context, ref, v),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            v.isCurrent
-                                ? Icons.check_circle_rounded
-                                : Icons.history_rounded,
-                            color: v.isCurrent ? const Color(0xFF34D399) : colors.textMuted,
-                          ),
-                          title: Row(
-                            children: [
-                              Text('v${v.versionName}'),
-                              if (!v.isCurrent) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: colors.accentStart.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(6),
+        if (!app.isWebApp) ...[
+          Text('Version history',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text('Tap any version below to install it',
+              style: TextStyle(color: colors.textMuted, fontSize: 12)),
+          const SizedBox(height: 8),
+          versionsAsync.when(
+            loading: () => Center(child: CircularProgressIndicator(color: colors.accentEnd)),
+            error: (e, st) => Text('Could not load version history',
+                style: TextStyle(color: colors.textSecondary)),
+            data: (versions) {
+              if (versions.isEmpty) {
+                return Text('No versions uploaded yet.',
+                    style: TextStyle(color: colors.textSecondary));
+              }
+              return Column(
+                children: versions
+                    .map((v) => InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _handleVersionTap(context, ref, v),
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              v.isCurrent
+                                  ? Icons.check_circle_rounded
+                                  : Icons.history_rounded,
+                              color: v.isCurrent ? const Color(0xFF34D399) : colors.textMuted,
+                            ),
+                            title: Row(
+                              children: [
+                                Text('v${v.versionName}'),
+                                if (!v.isCurrent) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: colors.accentStart.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text('Rollback',
+                                        style: TextStyle(
+                                            color: colors.accentEnd,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700)),
                                   ),
-                                  child: Text('Rollback',
-                                      style: TextStyle(
-                                          color: colors.accentEnd,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700)),
-                                ),
+                                ],
                               ],
-                            ],
+                            ),
+                            subtitle: Text(v.releaseNotes.isNotEmpty
+                                ? v.releaseNotes
+                                : 'No release notes',
+                                style: TextStyle(color: colors.textSecondary)),
+                            trailing: Icon(Icons.download_for_offline_outlined,
+                                color: colors.textMuted, size: 20),
                           ),
-                          subtitle: Text(v.releaseNotes.isNotEmpty
-                              ? v.releaseNotes
-                              : 'No release notes',
-                              style: TextStyle(color: colors.textSecondary)),
-                          trailing: Icon(Icons.download_for_offline_outlined,
-                              color: colors.textMuted, size: 20),
-                        ),
-                      ))
-                  .toList(),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
+                        ))
+                    .toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
         Row(
           children: [
             Expanded(
