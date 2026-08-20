@@ -67,6 +67,8 @@ class DeveloperRepository {
     required String shortDescription,
     required String fullDescription,
     required AppCategory category,
+    String appType = 'apk',
+    String? webUrl,
   }) async {
     final row = await _client
         .from('apps')
@@ -81,6 +83,8 @@ class DeveloperRepository {
           'status': AppStatus.draft.name,
           'current_version': '0.1.0',
           'version_code': 1,
+          'app_type': appType,
+          'web_url': webUrl,
         })
         .select('id')
         .single();
@@ -389,8 +393,10 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
   final _versionName = TextEditingController(text: '0.1.0');
   final _versionCode = TextEditingController(text: '1');
   final _releaseNotes = TextEditingController();
+  final _webUrl = TextEditingController();
 
   AppCategory _category = AppCategory.productivity;
+  bool _isWebApp = false;
   XFile? _icon;
   final List<XFile> _screenshots = [];
   PlatformFile? _apk;
@@ -406,6 +412,7 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
     _versionName.dispose();
     _versionCode.dispose();
     _releaseNotes.dispose();
+    _webUrl.dispose();
     super.dispose();
   }
 
@@ -453,9 +460,15 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
 
   Future<void> _submit({required bool submitForReview}) async {
     if (!_formKey.currentState!.validate()) return;
-    if (submitForReview && _apk == null) {
-      _showError('Add an APK before submitting for review.');
-      return;
+    if (submitForReview) {
+      if (_isWebApp && _webUrl.text.trim().isEmpty) {
+        _showError('Add a website URL before submitting for review.');
+        return;
+      }
+      if (!_isWebApp && _apk == null) {
+        _showError('Add an APK before submitting for review.');
+        return;
+      }
     }
 
     final dev = await ref.read(currentDeveloperProvider.future);
@@ -476,10 +489,12 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
         developerId: dev.id,
         developerName: dev.displayName,
         name: _name.text.trim(),
-        packageName: _packageName.text.trim(),
+        packageName: _isWebApp ? '' : _packageName.text.trim(),
         shortDescription: _shortDescription.text.trim(),
         fullDescription: _fullDescription.text.trim(),
         category: _category,
+        appType: _isWebApp ? 'web' : 'apk',
+        webUrl: _isWebApp ? _webUrl.text.trim() : null,
       );
 
       if (_icon != null) {
@@ -499,7 +514,7 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
         await repo.updateScreenshots(appId, urls);
       }
 
-      if (_apk != null) {
+      if (!_isWebApp && _apk != null) {
         setState(() => _statusText = 'Reading APK...');
         final apkBytes = await File(_apk!.path!).readAsBytes();
 
@@ -566,6 +581,26 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('APK App'),
+                            selected: !_isWebApp,
+                            onSelected: (_) => setState(() => _isWebApp = false),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Web App'),
+                            selected: _isWebApp,
+                            onSelected: (_) => setState(() => _isWebApp = true),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _name,
                       decoration: const InputDecoration(labelText: 'App name'),
@@ -573,30 +608,33 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                           (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _packageName,
-                      decoration: const InputDecoration(
-                        labelText: 'Package name (application ID)',
-                        hintText: 'e.g. com.yourcompany.appname',
+                    if (!_isWebApp) ...[
+                      TextFormField(
+                        controller: _packageName,
+                        decoration: const InputDecoration(
+                          labelText: 'Package name (application ID)',
+                          hintText: 'e.g. com.yourcompany.appname',
+                        ),
+                        validator: (v) {
+                          if (_isWebApp) return null;
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          final valid = RegExp(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$')
+                              .hasMatch(v.trim());
+                          return valid
+                              ? null
+                              : 'Use the exact applicationId from this app\'s build.gradle';
+                        },
                       ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Required';
-                        final valid = RegExp(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$')
-                            .hasMatch(v.trim());
-                        return valid
-                            ? null
-                            : 'Use the exact applicationId from this app\'s build.gradle';
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Must exactly match this APK\'s applicationId. Keep using '
-                      'the same package name and signing key in every future '
-                      'version, or updates will fail to install over the '
-                      'existing app.',
-                      style: TextStyle(color: ZetraColors.textMuted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Must exactly match this APK\'s applicationId. Keep using '
+                        'the same package name and signing key in every future '
+                        'version, or updates will fail to install over the '
+                        'existing app.',
+                        style: TextStyle(color: ZetraColors.textMuted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextFormField(
                       controller: _shortDescription,
                       decoration:
@@ -644,41 +682,50 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                       onTap: _pickScreenshots,
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _versionName,
-                            decoration: const InputDecoration(labelText: 'Version'),
+                    if (_isWebApp) ...[
+                      TextFormField(
+                        controller: _webUrl,
+                        decoration: const InputDecoration(
+                            labelText: 'Website URL (https://...)'),
+                        keyboardType: TextInputType.url,
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _versionName,
+                              decoration: const InputDecoration(labelText: 'Version'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _versionCode,
-                            decoration:
-                                const InputDecoration(labelText: 'Version code'),
-                            keyboardType: TextInputType.number,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _versionCode,
+                              decoration:
+                                  const InputDecoration(labelText: 'Version code'),
+                              keyboardType: TextInputType.number,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _releaseNotes,
-                      decoration: const InputDecoration(labelText: 'Release notes'),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    Text('APK file', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    _PickerTile(
-                      label: _apk == null
-                          ? 'Choose APK'
-                          : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
-                      icon: Icons.android_rounded,
-                      onTap: _pickApk,
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _releaseNotes,
+                        decoration: const InputDecoration(labelText: 'Release notes'),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 16),
+                      Text('APK file', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      _PickerTile(
+                        label: _apk == null
+                            ? 'Choose APK'
+                            : '${_apk!.name} (${(_apk!.size / (1024 * 1024)).toStringAsFixed(1)} MB)',
+                        icon: Icons.android_rounded,
+                        onTap: _pickApk,
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     if (_statusText != null) ...[
                       Row(
@@ -1013,11 +1060,20 @@ class _DeveloperAppBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 4),
-        Text('v${app.currentVersion} • ${app.category.label}',
-            style: const TextStyle(color: ZetraColors.textSecondary)),
-        if (app.packageName.isNotEmpty) ...[
+        Text(
+          app.isWebApp
+              ? 'Web app • ${app.category.label}'
+              : 'v${app.currentVersion} • ${app.category.label}',
+          style: const TextStyle(color: ZetraColors.textSecondary),
+        ),
+        if (!app.isWebApp && app.packageName.isNotEmpty) ...[
           const SizedBox(height: 2),
           Text(app.packageName,
+              style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
+        ],
+        if (app.isWebApp && app.webUrl != null) ...[
+          const SizedBox(height: 2),
+          Text(app.webUrl!,
               style: const TextStyle(color: ZetraColors.textMuted, fontSize: 12)),
         ],
         const SizedBox(height: 20),
@@ -1038,11 +1094,12 @@ class _DeveloperAppBody extends ConsumerWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            ElevatedButton.icon(
-              onPressed: () => context.push('/developer/apps/${app.id}/upload'),
-              icon: const Icon(Icons.upload_rounded),
-              label: const Text('Upload new version'),
-            ),
+            if (!app.isWebApp)
+              ElevatedButton.icon(
+                onPressed: () => context.push('/developer/apps/${app.id}/upload'),
+                icon: const Icon(Icons.upload_rounded),
+                label: const Text('Upload new version'),
+              ),
             if (app.status == AppStatus.draft)
               OutlinedButton.icon(
                 onPressed: () async {
