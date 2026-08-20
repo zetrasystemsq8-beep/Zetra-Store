@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import '../features/contact_screen.dart';
 import '../features/discover.dart';
 import '../features/developer.dart';
 import '../features/developer_auth.dart';
@@ -541,6 +541,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (c, s) => BugReportScreen(appId: s.pathParameters['id']!),
       ),
+      GoRoute(
+  path: '/contact',
+  parentNavigatorKey: _rootNavigatorKey,
+  builder: (c, s) => const ContactScreen(),
+),
       GoRoute(
         path: '/apps/:id/feedback',
         parentNavigatorKey: _rootNavigatorKey,
