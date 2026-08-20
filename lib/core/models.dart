@@ -159,6 +159,8 @@ class AppModel {
     this.screenshotUrls = const [],
     this.fileSizeBytes,
     this.minAndroidVersion,
+    this.appType = 'apk',
+    this.webUrl,
   });
 
   final String id;
@@ -180,8 +182,11 @@ class AppModel {
   final List<String> screenshotUrls;
   final int? fileSizeBytes;
   final String? minAndroidVersion;
+  final String appType; // 'apk' or 'web'
+  final String? webUrl;
 
   bool get isBeta => status == AppStatus.published && versionCode < 10;
+  bool get isWebApp => appType == 'web';
 
   String get fileSizeLabel {
     if (fileSizeBytes == null) return '-';
@@ -212,6 +217,8 @@ class AppModel {
           .toList(),
       fileSizeBytes: map['file_size_bytes'] as int?,
       minAndroidVersion: map['min_android_version'] as String?,
+      appType: map['app_type'] as String? ?? 'apk',
+      webUrl: map['web_url'] as String?,
     );
   }
 
@@ -230,6 +237,8 @@ class AppModel {
       'icon_url': iconUrl,
       'screenshot_urls': screenshotUrls,
       'min_android_version': minAndroidVersion,
+      'app_type': appType,
+      'web_url': webUrl,
     };
   }
 }
@@ -405,9 +414,6 @@ class FeedbackModel {
 
 /// ---------------------------------------------------------------------
 /// INSTALL STATE (Install / Update / Open detection)
-/// Lives here (not in a feature file) so both AppCard (below) and the
-/// App Details screen can share the exact same provider instance and
-/// resolution logic.
 /// ---------------------------------------------------------------------
 final installedAppInfoProvider =
     FutureProvider.family.autoDispose<AppInfo?, String>((ref, packageName) async {
@@ -567,9 +573,6 @@ final appsRepositoryProvider = Provider<AppsRepository>((ref) {
 
 /// ---------------------------------------------------------------------
 /// SHARED BRAND WIDGETS
-/// All widgets below use context.zetraColors (theme-aware) instead of
-/// hardcoded ZetraColors.xxx constants (which always resolve to
-/// dark-mode values regardless of the active theme).
 /// ---------------------------------------------------------------------
 class GlowIcon extends StatelessWidget {
   const GlowIcon({super.key, required this.icon, this.size = 84});
@@ -674,8 +677,6 @@ class GradientButton extends StatelessWidget {
   }
 }
 
-/// App list/grid tile. Now a ConsumerWidget so it can show a live
-/// Update dot without the parent screen needing to wire anything up.
 class AppCard extends ConsumerWidget {
   const AppCard({super.key, required this.app, this.onTap});
 
@@ -686,7 +687,9 @@ class AppCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.zetraColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final installedAsync = ref.watch(installedAppInfoProvider(app.packageName));
+    final installedAsync = app.isWebApp
+        ? const AsyncValue<dynamic>.data(null)
+        : ref.watch(installedAppInfoProvider(app.packageName));
 
     return Material(
       color: Colors.transparent,
@@ -719,34 +722,57 @@ class AppCard extends ConsumerWidget {
                           )
                         : _AppIconFallback(colors: colors),
                   ),
-                  installedAsync.maybeWhen(
-                    data: (installed) {
-                      final state = resolveInstallState(installed, app.versionCode);
-                      if (state != InstallState.updateAvailable) {
-                        return const SizedBox.shrink();
-                      }
-                      return Positioned(
-                        top: -4,
-                        right: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: colors.card,
-                            shape: BoxShape.circle,
-                          ),
+                  if (!app.isWebApp)
+                    installedAsync.maybeWhen(
+                      data: (installed) {
+                        final state = resolveInstallState(installed, app.versionCode);
+                        if (state != InstallState.updateAvailable) {
+                          return const SizedBox.shrink();
+                        }
+                        return Positioned(
+                          top: -4,
+                          right: -4,
                           child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF34D399),
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: colors.card,
                               shape: BoxShape.circle,
                             ),
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF34D399),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           ),
+                        );
+                      },
+                      orElse: () => const SizedBox.shrink(),
+                    ),
+                  if (app.isWebApp)
+                    Positioned(
+                      bottom: -4,
+                      right: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: colors.card,
+                          shape: BoxShape.circle,
                         ),
-                      );
-                    },
-                    orElse: () => const SizedBox.shrink(),
-                  ),
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: colors.accentEnd,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.language_rounded,
+                              size: 11, color: Colors.white),
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(width: 14),
@@ -785,44 +811,47 @@ class AppCard extends ConsumerWidget {
                       children: [
                         _CategoryPill(label: app.category.label),
                         const SizedBox(width: 8),
-                        installedAsync.maybeWhen(
-                          data: (installed) {
-                            final state =
-                                resolveInstallState(installed, app.versionCode);
-                            if (state == InstallState.updateAvailable) {
-                              return Text(
-                                'Update',
-                                style: TextStyle(
-                                  color: const Color(0xFF34D399),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              );
-                            }
-                            if (state == InstallState.upToDate) {
-                              return Text(
-                                'Installed',
-                                style: TextStyle(
-                                  color: colors.textMuted,
-                                  fontSize: 11,
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                          orElse: () => const SizedBox.shrink(),
-                        ),
-                        const Spacer(),
-                        Icon(Icons.download_outlined,
-                            size: 13, color: colors.textMuted),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${app.downloadCount}',
-                          style: TextStyle(
-                            color: colors.textMuted,
-                            fontSize: 12,
+                        if (!app.isWebApp)
+                          installedAsync.maybeWhen(
+                            data: (installed) {
+                              final state =
+                                  resolveInstallState(installed, app.versionCode);
+                              if (state == InstallState.updateAvailable) {
+                                return const Text(
+                                  'Update',
+                                  style: TextStyle(
+                                    color: Color(0xFF34D399),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                );
+                              }
+                              if (state == InstallState.upToDate) {
+                                return Text(
+                                  'Installed',
+                                  style: TextStyle(
+                                    color: colors.textMuted,
+                                    fontSize: 11,
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                            orElse: () => const SizedBox.shrink(),
                           ),
-                        ),
+                        const Spacer(),
+                        if (!app.isWebApp) ...[
+                          Icon(Icons.download_outlined,
+                              size: 13, color: colors.textMuted),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${app.downloadCount}',
+                            style: TextStyle(
+                              color: colors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
