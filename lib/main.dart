@@ -17,25 +17,38 @@ Future<void> main() async {
   runApp(const ProviderScope(child: ZetraApp()));
 }
 
-class ZetraApp extends ConsumerWidget {
-  const ZetraApp({super.key});
+class ZetraStoreApp extends ConsumerStatefulWidget {
+  const ZetraStoreApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ZetraStoreApp> createState() => _ZetraStoreAppState();
+}
+
+class _ZetraStoreAppState extends ConsumerState<ZetraStoreApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted) {
+        await showAnnouncementsDialog(context, ref);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
       title: 'Zetra Store',
-      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
-      builder: (context, child) {
-        return UpdateGate(child: child ?? const SizedBox.shrink());
-      },
+      debugShowCheckedModeBanner: false,
     );
   }
+}
 }
 
 /// Wraps the whole app. Checks Supabase for the latest version on launch.
