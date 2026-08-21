@@ -14,8 +14,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
     }
 
     defaultConfig {
@@ -31,8 +33,8 @@ android {
         create("release") {
             val keystoreFile = rootProject.file("zetra_keystore.jks")
             if (keystoreFile.exists()) {
-                keyStore = keystoreFile
-                keyStorePassword = System.getenv("STORE_PASSWORD") ?: project.findProperty("storePassword")?.toString() ?: ""
+                storeFile = keystoreFile
+                storePassword = System.getenv("STORE_PASSWORD") ?: project.findProperty("storePassword")?.toString() ?: ""
                 keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("keyPassword")?.toString() ?: ""
                 keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("keyAlias")?.toString() ?: "zetra_key"
             }
