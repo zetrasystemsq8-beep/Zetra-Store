@@ -27,12 +27,21 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = rootProject.file("zetra_keystore.jks")
+            if (keystoreFile.exists()) {
+                keyStore = keystoreFile
+                keyStorePassword = System.getenv("STORE_PASSWORD") ?: project.findProperty("storePassword")?.toString() ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("keyPassword")?.toString() ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("keyAlias")?.toString() ?: "zetra_key"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TEMP: signs release builds with the debug key.
-            // Replace with your own signingConfig before publishing.
-            signingConfig = signingConfigs.getByName("debug")
-
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
 
