@@ -34,9 +34,9 @@ android {
             val keystoreFile = rootProject.file("zetra_keystore.jks")
             if (keystoreFile.exists()) {
                 storeFile = keystoreFile
-                storePassword = System.getenv("STORE_PASSWORD") ?: project.findProperty("storePassword")?.toString() ?: ""
-                keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("keyPassword")?.toString() ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("keyAlias")?.toString() ?: "zetra_key"
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: "zetraapps"
             }
         }
     }
