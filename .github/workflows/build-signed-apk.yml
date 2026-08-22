@@ -23,7 +23,7 @@ jobs:
       
       - name: Generate Keystore
         run: |
-          keytool -genkey -v -keystore $GITHUB_WORKSPACE/zetra_keystore.jks \
+          keytool -genkey -v -keystore $GITHUB_WORKSPACE/android/zetra_keystore.jks \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -alias zetra_key \
             -storepass ${{ secrets.STORE_PASSWORD }} \
@@ -53,4 +53,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zetra_keystore.jks
-          path: zetra_keystore.jks
+          path: android/zetra_keystore.jks
