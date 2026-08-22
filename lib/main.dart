@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'core/app_core.dart';
+import 'core/announcement_system.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +15,7 @@ Future<void> main() async {
     anonKey: Env.supabaseAnonKey,
   );
 
-  runApp(const ProviderScope(child: ZetraApp()));
+  runApp(const ProviderScope(child: ZetraStoreApp()));
 }
 
 class ZetraStoreApp extends ConsumerStatefulWidget {
@@ -41,14 +42,16 @@ class _ZetraStoreAppState extends ConsumerState<ZetraStoreApp> {
 
     return MaterialApp.router(
       title: 'Zetra Store',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
-      debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        return UpdateGate(child: child ?? const SizedBox.shrink());
+      },
     );
   }
-}
 }
 
 /// Wraps the whole app. Checks Supabase for the latest version on launch.
