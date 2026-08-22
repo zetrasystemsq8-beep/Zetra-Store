@@ -64,6 +64,12 @@ class _ZetraStoreAppState extends ConsumerState<ZetraStoreApp> {
 /// update screen. Downloads and installs in-app instead of sending
 /// users to the browser, since large GitHub downloads can stall
 /// indefinitely on some Nigerian mobile networks.
+///
+/// NOTE: This build introduced a new release signing key. Anyone on an
+/// older build signed with the previous (debug) key will hit a signature
+/// mismatch on install — the UI below detects that failure and tells
+/// them to uninstall first, one time only. Once everyone is on the new
+/// key, in-app installs will just work silently going forward.
 class UpdateGate extends StatefulWidget {
   final Widget child;
   const UpdateGate({super.key, required this.child});
@@ -79,6 +85,7 @@ class _UpdateGateState extends State<UpdateGate> {
   bool _downloading = false;
   double _progress = 0;
   String? _error;
+  bool _signatureMismatch = false;
 
   @override
   void initState() {
@@ -151,6 +158,7 @@ class _UpdateGateState extends State<UpdateGate> {
       _downloading = true;
       _progress = 0;
       _error = null;
+      _signatureMismatch = false;
     });
 
     final client = http.Client();
@@ -182,10 +190,26 @@ class _UpdateGateState extends State<UpdateGate> {
 
       if (!mounted) return;
 
-      await ApkInstaller.install(filePath);
+      try {
+        await ApkInstaller.install(filePath);
+        if (mounted) {
+          setState(() => _downloading = false);
+        }
+      } catch (installError) {
+        final message = installError.toString().toLowerCase();
+        final looksLikeSignatureIssue = message.contains('signature') ||
+            message.contains('conflict') ||
+            message.contains('install_failed');
 
-      if (mounted) {
-        setState(() => _downloading = false);
+        if (mounted) {
+          setState(() {
+            _downloading = false;
+            _signatureMismatch = looksLikeSignatureIssue;
+            _error = looksLikeSignatureIssue
+                ? null
+                : 'Install failed: $installError';
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -230,13 +254,25 @@ class _UpdateGateState extends State<UpdateGate> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'A new version of Zetra Store is available. '
-                    'Tap below to download and install it — your current '
-                    'app and data stay in place.',
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
-                    textAlign: TextAlign.center,
-                  ),
+                  if (_signatureMismatch) ...[
+                    const Text(
+                      'This update needs a fresh install — a one-time step.\n\n'
+                      '1. Uninstall the current Zetra Store app\n'
+                      '2. Reopen the download link below\n'
+                      '3. Install the new version\n\n'
+                      'After this, future updates will install automatically '
+                      'with no extra steps.',
+                      style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
+                  ] else ...[
+                    const Text(
+                      'A new version of Zetra Store is available. '
+                      'Tap below to download and install it.',
+                      style: TextStyle(color: Colors.white70, fontSize: 15),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   if (_downloading) ...[
                     ClipRRect(
@@ -262,7 +298,12 @@ class _UpdateGateState extends State<UpdateGate> {
                         backgroundColor: Colors.blue,
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                       ),
-                      child: const Text('Download Update', style: TextStyle(fontSize: 16)),
+                      child: Text(
+                        _signatureMismatch
+                            ? 'Download Again After Uninstalling'
+                            : 'Download Update',
+                        style: const TextStyle(fontSize: 16),
+                      ),
                     ),
                   ],
                   if (_error != null) ...[
