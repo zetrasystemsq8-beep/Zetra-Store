@@ -175,7 +175,10 @@ class _UpdateGateState extends State<UpdateGate> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'A new version of Zetra Store is available. Please update to continue.',
+                    'A new version of Zetra Store is available.\n\n'
+                    'Step 1: Tap "Download Update" below to start the download.\n'
+                    'Step 2: After it downloads, uninstall this current app.\n'
+                    'Step 3: Open the downloaded file to install the new version.',
                     style: TextStyle(color: Colors.white70, fontSize: 15),
                     textAlign: TextAlign.center,
                   ),
@@ -186,7 +189,7 @@ class _UpdateGateState extends State<UpdateGate> {
                       backgroundColor: Colors.blue,
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                     ),
-                    child: const Text('Update Now', style: TextStyle(fontSize: 16)),
+                    child: const Text('Download Update', style: TextStyle(fontSize: 16)),
                   ),
                 ],
               ),
