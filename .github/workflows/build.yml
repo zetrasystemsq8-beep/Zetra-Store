@@ -45,7 +45,7 @@ jobs:
 
       - name: Decode keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > zetra_keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/zetra_keystore.jks
 
       - name: Build APK
         env:
