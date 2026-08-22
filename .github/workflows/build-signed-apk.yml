@@ -21,6 +21,9 @@ jobs:
         with:
           flutter-version: '3.47.1'
       
+      - name: Remove old keystore if present
+        run: rm -f android/zetra_keystore.jks
+      
       - name: Generate Keystore
         run: |
           keytool -genkey -v -keystore $GITHUB_WORKSPACE/android/zetra_keystore.jks \
