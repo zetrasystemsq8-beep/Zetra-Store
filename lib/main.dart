@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'core/app_core.dart';
+import 'core/apk_installer.dart';
 import 'core/announcement_system.dart';
 
 Future<void> main() async {
@@ -57,7 +61,9 @@ class _ZetraStoreAppState extends ConsumerState<ZetraStoreApp> {
 /// Wraps the whole app. Checks Supabase for the latest version on launch.
 /// If the installed version is outdated and it's been more than 3 days
 /// since that version was released, blocks the app with a mandatory
-/// update screen.
+/// update screen. Downloads and installs in-app instead of sending
+/// users to the browser, since large GitHub downloads can stall
+/// indefinitely on some Nigerian mobile networks.
 class UpdateGate extends StatefulWidget {
   final Widget child;
   const UpdateGate({super.key, required this.child});
@@ -70,6 +76,9 @@ class _UpdateGateState extends State<UpdateGate> {
   bool _checking = true;
   bool _mustUpdate = false;
   String? _updateUrl;
+  bool _downloading = false;
+  double _progress = 0;
+  String? _error;
 
   @override
   void initState() {
@@ -135,11 +144,58 @@ class _UpdateGateState extends State<UpdateGate> {
     return false;
   }
 
-  Future<void> _launchUpdate() async {
-    if (_updateUrl == null) return;
-    final uri = Uri.tryParse(_updateUrl!);
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _downloadAndInstall() async {
+    if (_updateUrl == null || _downloading) return;
+
+    setState(() {
+      _downloading = true;
+      _progress = 0;
+      _error = null;
+    });
+
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(_updateUrl!));
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Server returned ${response.statusCode}');
+      }
+
+      final total = response.contentLength ?? 0;
+      var received = 0;
+
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/zetra_store_update.apk';
+      final file = File(filePath);
+      final sink = file.openWrite();
+
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (total > 0 && mounted) {
+          setState(() => _progress = received / total);
+        }
+      }
+
+      await sink.close();
+
+      if (!mounted) return;
+
+      await ApkInstaller.install(filePath);
+
+      if (mounted) {
+        setState(() => _downloading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _downloading = false;
+          _error = 'Download failed: $e';
+        });
+      }
+    } finally {
+      client.close();
     }
   }
 
@@ -175,22 +231,48 @@ class _UpdateGateState extends State<UpdateGate> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'A new version of Zetra Store is available.\n\n'
-                    'Step 1: Tap "Download Update" below to start the download.\n'
-                    'Step 2: After it downloads, uninstall this current app.\n'
-                    'Step 3: Open the downloaded file to install the new version.',
+                    'A new version of Zetra Store is available. '
+                    'Tap below to download and install it — your current '
+                    'app and data stay in place.',
                     style: TextStyle(color: Colors.white70, fontSize: 15),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: _launchUpdate,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  if (_downloading) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _progress > 0 ? _progress : null,
+                        color: Colors.blue,
+                        backgroundColor: Colors.white24,
+                        minHeight: 6,
+                      ),
                     ),
-                    child: const Text('Download Update', style: TextStyle(fontSize: 16)),
-                  ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _progress > 0
+                          ? '${(_progress * 100).toStringAsFixed(0)}%'
+                          : 'Starting...',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ] else ...[
+                    ElevatedButton(
+                      onPressed: _downloadAndInstall,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                      ),
+                      child: const Text('Download Update', style: TextStyle(fontSize: 16)),
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ],
               ),
             ),
