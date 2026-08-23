@@ -58,7 +58,10 @@ jobs:
             --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
             --dart-define=WORKER_URL=${{ secrets.WORKER_URL }} \
             --dart-define=WORKER_API_KEY=${{ secrets.WORKER_API_KEY }} \
-            --dart-define=ADMIN_PIN=${{ secrets.ADMIN_PIN }}
+            --dart-define=ADMIN_PIN=${{ secrets.ADMIN_PIN }} \
+            --dart-define=GH_PAT=${{ secrets.GH_PAT }} \
+            --dart-define=GH_OWNER=${{ secrets.GH_OWNER }} \
+            --dart-define=GH_REPO=${{ secrets.GH_REPO }}
 
       - name: Upload APK (build artifact, for internal testing)
         uses: actions/upload-artifact@v4
