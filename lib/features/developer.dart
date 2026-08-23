@@ -58,6 +58,7 @@ class DeveloperRepository {
   final SupabaseClient _client;
 
   static const bucket = 'apps';
+  static const int _largeFileThreshold = 90 * 1024 * 1024; // 90MB
 
   Future<String> createApp({
     required String developerId,
@@ -112,11 +113,23 @@ class DeveloperRepository {
         .update({'screenshot_urls': urls}).eq('id', appId);
   }
 
+  /// Routes to the Cloudflare Worker for files under 90MB (unchanged
+  /// behaviour), or straight to GitHub for anything larger, since
+  /// Cloudflare rejects request bodies over ~100MB before the Worker
+  /// code even runs.
   Future<Map<String, dynamic>> uploadApk({
     required String appId,
     required String versionName,
     required Uint8List bytes,
   }) async {
+    if (bytes.length > _largeFileThreshold) {
+      return _uploadApkDirectToGitHub(
+        appId: appId,
+        versionName: versionName,
+        bytes: bytes,
+      );
+    }
+
     final uri = Uri.parse(
       '${Env.workerUrl}/upload-apk?appId=$appId&versionName=$versionName',
     );
@@ -132,6 +145,75 @@ class DeveloperRepository {
       throw Exception('Upload failed: ${response.body}');
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// For files too large for the Cloudflare Worker: creates a GitHub
+  /// Release directly from the phone, then uploads the APK as its
+  /// asset. Bypasses Cloudflare entirely for this path. Returns the
+  /// same {"downloadUrl": ...} shape as the Worker path so callers
+  /// don't need to know which path was used.
+  Future<Map<String, dynamic>> _uploadApkDirectToGitHub({
+    required String appId,
+    required String versionName,
+    required Uint8List bytes,
+  }) async {
+    final tagName =
+        '$appId-v$versionName-${DateTime.now().millisecondsSinceEpoch}';
+    final assetName = '$appId-$versionName.apk';
+
+    // Step 1: create the release
+    final createReleaseUri = Uri.parse(
+      'https://api.github.com/repos/${Env.githubOwner}/${Env.githubRepo}/releases',
+    );
+
+    final createResponse = await http.post(
+      createReleaseUri,
+      headers: {
+        'Authorization': 'Bearer ${Env.githubPat}',
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'tag_name': tagName,
+        'name': tagName,
+        'body': 'Large APK upload (${(bytes.length / (1024 * 1024)).toStringAsFixed(1)} MB) via direct GitHub upload.',
+        'draft': false,
+        'prerelease': false,
+      }),
+    );
+
+    if (createResponse.statusCode != 201) {
+      throw Exception(
+          'Failed to create GitHub release: ${createResponse.statusCode} ${createResponse.body}');
+    }
+
+    final releaseData = jsonDecode(createResponse.body) as Map<String, dynamic>;
+    final uploadUrlTemplate = releaseData['upload_url'] as String;
+    // upload_url looks like: https://uploads.github.com/repos/OWNER/REPO/releases/ID/assets{?name,label}
+    final uploadBaseUrl = uploadUrlTemplate.split('{').first;
+
+    // Step 2: upload the APK as an asset on that release
+    final uploadUri = Uri.parse('$uploadBaseUrl?name=$assetName');
+
+    final uploadResponse = await http.post(
+      uploadUri,
+      headers: {
+        'Authorization': 'Bearer ${Env.githubPat}',
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/vnd.android.package-archive',
+      },
+      body: bytes,
+    );
+
+    if (uploadResponse.statusCode != 201) {
+      throw Exception(
+          'Failed to upload APK asset: ${uploadResponse.statusCode} ${uploadResponse.body}');
+    }
+
+    final assetData = jsonDecode(uploadResponse.body) as Map<String, dynamic>;
+    final downloadUrl = assetData['browser_download_url'] as String;
+
+    return {'downloadUrl': downloadUrl};
   }
 
   Future<void> createVersion({
@@ -518,7 +600,9 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
         setState(() => _statusText = 'Reading APK...');
         final apkBytes = await File(_apk!.path!).readAsBytes();
 
-        setState(() => _statusText = 'Uploading to GitHub Releases...');
+        setState(() => _statusText = apkBytes.length > 90 * 1024 * 1024
+            ? 'Uploading large file directly to GitHub...'
+            : 'Uploading to GitHub Releases...');
         final versionName = _versionName.text.trim();
         final result = await repo.uploadApk(
           appId: appId,
@@ -725,6 +809,15 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                         icon: Icons.android_rounded,
                         onTap: _pickApk,
                       ),
+                      if (_apk != null && _apk!.size > 90 * 1024 * 1024) ...[
+                        const SizedBox(height: 6),
+                        const Text(
+                          'This file is over 90MB — it will upload directly '
+                          'to GitHub instead of through the usual path. May '
+                          'take longer depending on your connection.',
+                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                        ),
+                      ],
                     ],
                     const SizedBox(height: 28),
                     if (_statusText != null) ...[
@@ -737,8 +830,10 @@ class _CreateAppScreenState extends ConsumerState<CreateAppScreen> {
                                 strokeWidth: 2, color: ZetraColors.accentEnd),
                           ),
                           const SizedBox(width: 12),
-                          Text(_statusText!,
-                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                          Expanded(
+                            child: Text(_statusText!,
+                                style: const TextStyle(color: ZetraColors.textSecondary)),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -886,7 +981,9 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
       setState(() => _statusText = 'Reading APK...');
       final apkBytes = await File(_apk!.path!).readAsBytes();
 
-      setState(() => _statusText = 'Uploading to GitHub Releases...');
+      setState(() => _statusText = apkBytes.length > 90 * 1024 * 1024
+          ? 'Uploading large file directly to GitHub...'
+          : 'Uploading to GitHub Releases...');
       final result = await repo.uploadApk(
         appId: widget.appId,
         versionName: versionName,
@@ -977,6 +1074,15 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
                       icon: Icons.android_rounded,
                       onTap: _pickApk,
                     ),
+                    if (_apk != null && _apk!.size > 90 * 1024 * 1024) ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                        'This file is over 90MB — it will upload directly '
+                        'to GitHub instead of through the usual path. May '
+                        'take longer depending on your connection.',
+                        style: TextStyle(color: Colors.orange, fontSize: 12),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     if (_statusText != null) ...[
                       Row(
@@ -988,8 +1094,10 @@ class _UploadVersionScreenState extends ConsumerState<UploadVersionScreen> {
                                 strokeWidth: 2, color: ZetraColors.accentEnd),
                           ),
                           const SizedBox(width: 12),
-                          Text(_statusText!,
-                              style: const TextStyle(color: ZetraColors.textSecondary)),
+                          Expanded(
+                            child: Text(_statusText!,
+                                style: const TextStyle(color: ZetraColors.textSecondary)),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
