@@ -20,6 +20,9 @@ class Env {
   static const String workerApiKey =
       String.fromEnvironment('WORKER_API_KEY');
   static const String adminPin = String.fromEnvironment('ADMIN_PIN');
+  static const String githubPat = String.fromEnvironment('GH_PAT');
+  static const String githubOwner = String.fromEnvironment('GH_OWNER');
+  static const String githubRepo = String.fromEnvironment('GH_REPO');
 }
 
 /// ---------------------------------------------------------------------
@@ -542,10 +545,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (c, s) => BugReportScreen(appId: s.pathParameters['id']!),
       ),
       GoRoute(
-  path: '/contact',
-  parentNavigatorKey: _rootNavigatorKey,
-  builder: (c, s) => const ContactScreen(),
-),
+        path: '/contact',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (c, s) => const ContactScreen(),
+      ),
       GoRoute(
         path: '/apps/:id/feedback',
         parentNavigatorKey: _rootNavigatorKey,
