@@ -8,6 +8,7 @@ import '../features/discover.dart';
 import '../features/developer.dart';
 import '../features/developer_auth.dart';
 import '../features/tester_actions.dart';
+import 'download_manager.dart';
 
 /// ---------------------------------------------------------------------
 /// ENVIRONMENT / SUPABASE CONFIG
@@ -68,7 +69,6 @@ class ZetraColors {
     colors: [lightAccentStart, lightAccentEnd],
   );
 
-  // Fallback for backwards compatibility
   @Deprecated('Use theme-aware colors instead')
   static const bgTop = darkBgTop;
   @Deprecated('Use theme-aware colors instead')
@@ -93,7 +93,6 @@ class ZetraColors {
   static const accentGradient = darkAccentGradient;
 }
 
-/// Helper extension for brightness-aware colors
 extension ZetraColorScheme on BuildContext {
   ZetraColorPalette get zetraColors {
     return Theme.of(this).brightness == Brightness.dark
@@ -102,7 +101,6 @@ extension ZetraColorScheme on BuildContext {
   }
 }
 
-/// Brightness-aware color palette
 class ZetraColorPalette {
   final Color bgPrimary;
   final Color bgSecondary;
@@ -143,7 +141,6 @@ class ZetraColorPalette {
         accentGradient = ZetraColors.lightAccentGradient;
 }
 
-/// Helper function to build theme-aware text theme
 TextTheme _buildTextTheme(Brightness brightness) {
   final baseTheme = brightness == Brightness.dark
       ? Typography.whiteMountainView
@@ -186,7 +183,6 @@ TextTheme _buildTextTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build input decoration theme
 InputDecorationTheme _buildInputDecorationTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final fillColor = isDark ? ZetraColors.darkCard : ZetraColors.lightCard;
@@ -218,7 +214,6 @@ InputDecorationTheme _buildInputDecorationTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build button themes
 (ElevatedButtonThemeData, OutlinedButtonThemeData, TextButtonThemeData)
     _buildButtonThemes(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
@@ -258,7 +253,6 @@ InputDecorationTheme _buildInputDecorationTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build chip theme
 ChipThemeData _buildChipTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final bgColor = isDark ? ZetraColors.darkCard : ZetraColors.lightCard;
@@ -280,7 +274,6 @@ ChipThemeData _buildChipTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build navigation bar theme
 NavigationBarThemeData _buildNavigationBarTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final bgColor = isDark ? ZetraColors.darkBgBottom : ZetraColors.lightBgSecondary;
@@ -305,7 +298,6 @@ NavigationBarThemeData _buildNavigationBarTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build card theme
 CardThemeData _buildCardTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final cardColor = isDark ? ZetraColors.darkCard : ZetraColors.lightCard;
@@ -323,7 +315,6 @@ CardThemeData _buildCardTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build app bar theme
 AppBarTheme _buildAppBarTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final iconColor = isDark ? ZetraColors.darkTextPrimary : ZetraColors.lightTextPrimary;
@@ -342,7 +333,6 @@ AppBarTheme _buildAppBarTheme(Brightness brightness) {
   );
 }
 
-/// Helper function to build color scheme
 ColorScheme _buildColorScheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
 
@@ -371,7 +361,6 @@ ColorScheme _buildColorScheme(Brightness brightness) {
   }
 }
 
-/// Helper function to build divider theme
 DividerThemeData _buildDividerTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final color = isDark ? ZetraColors.darkCardBorder : ZetraColors.lightCardBorder;
@@ -379,7 +368,6 @@ DividerThemeData _buildDividerTheme(Brightness brightness) {
   return DividerThemeData(color: color, space: 1);
 }
 
-/// Helper function to build FAB theme
 FloatingActionButtonThemeData _buildFABTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final bgColor = isDark ? ZetraColors.darkAccentEnd : ZetraColors.lightAccentEnd;
@@ -391,7 +379,6 @@ FloatingActionButtonThemeData _buildFABTheme(Brightness brightness) {
   );
 }
 
-/// Main theme builder
 ThemeData _buildThemeData(Brightness brightness) {
   final (elevatedTheme, outlinedTheme, textTheme) =
       _buildButtonThemes(brightness);
@@ -417,7 +404,6 @@ ThemeData _buildThemeData(Brightness brightness) {
   );
 }
 
-/// Main theme class
 class AppTheme {
   AppTheme._();
 
@@ -425,7 +411,6 @@ class AppTheme {
   static ThemeData dark = _buildThemeData(Brightness.dark);
 }
 
-/// Glow background for dark mode
 class GlowBackground extends StatelessWidget {
   const GlowBackground({super.key, required this.child});
 
@@ -471,7 +456,6 @@ class GlowBackground extends StatelessWidget {
   }
 }
 
-/// Router provider
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -606,7 +590,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Bottom navigation scaffold
+/// Bottom navigation scaffold. Body is now a Stack so the
+/// DownloadOverlay can float above every screen without blocking
+/// navigation — multiple downloads can run while the user browses.
 class ZetraScaffold extends StatelessWidget {
   const ZetraScaffold({super.key, required this.navigationShell});
 
@@ -617,7 +603,12 @@ class ZetraScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: GlowBackground(child: SafeArea(bottom: false, child: navigationShell)),
+      body: Stack(
+        children: [
+          GlowBackground(child: SafeArea(bottom: false, child: navigationShell)),
+          const DownloadOverlay(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => navigationShell.goBranch(
