@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_core.dart';
 import '../core/apk_installer.dart';
+import '../core/download_manager.dart';
 import '../core/models.dart';
 
 /// ---------------------------------------------------------------------
@@ -686,18 +687,20 @@ class _AppDetailsBody extends ConsumerWidget {
     );
   }
 
+  /// Downloads no longer block the screen. Progress is tracked in the
+  /// shared DownloadManager and shown as a small corner card (see
+  /// DownloadOverlay in core/download_manager.dart), so the user can
+  /// keep browsing — and start more than one download at once.
   void _handleDownload(BuildContext context, WidgetRef ref, AppVersion? specificVersion) {
-    _download(context, ref, specificVersion).then((_) {
-      ref.invalidate(installedAppInfoProvider(app.packageName));
-    }).catchError((e, st) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download error: $e')),
-        );
-      }
+    _download(context, ref, specificVersion).catchError((e, st) {
+      // Errors are already reported into the DownloadManager inside
+      // _download; this catch just prevents an unhandled Future error.
     });
   }
 
+  /// One-time friendly explainer, shown before a user's very first
+  /// install. Still a dialog since it only ever appears once — not the
+  /// repeated friction the corner-card change is meant to remove.
   Future<bool> _maybeShowInstallGuide(BuildContext context) async {
     final colors = context.zetraColors;
     final prefs = await SharedPreferences.getInstance();
@@ -741,7 +744,8 @@ class _AppDetailsBody extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(
                 'You\'ll only see this Zetra explanation once — after this, '
-                'installs and updates go straight through.',
+                'installs and updates run quietly in the corner while you '
+                'keep browsing.',
                 style: TextStyle(color: colors.textMuted, fontSize: 12, height: 1.4),
               ),
             ],
@@ -768,6 +772,9 @@ class _AppDetailsBody extends ConsumerWidget {
 
   Future<void> _download(
       BuildContext context, WidgetRef ref, AppVersion? specificVersion) async {
+    final manager = ref.read(downloadManagerProvider.notifier);
+    String? taskId;
+
     try {
       AppVersion? version = specificVersion;
 
@@ -786,10 +793,11 @@ class _AppDetailsBody extends ConsumerWidget {
       }
 
       final versionToInstall = version;
+      taskId = '${app.id}-${versionToInstall.id}';
 
       if (!context.mounted) return;
       final proceed = await _maybeShowInstallGuide(context);
-      if (!proceed || !context.mounted) return;
+      if (!proceed) return;
 
       await ref.read(appsRepositoryProvider).recordDownload(
             app.id,
@@ -797,50 +805,7 @@ class _AppDetailsBody extends ConsumerWidget {
             null,
           );
 
-      if (!context.mounted) return;
-
-      final colors = context.zetraColors;
-      final progress = ValueNotifier<double>(0);
-      var cancelled = false;
-
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => ValueListenableBuilder<double>(
-          valueListenable: progress,
-          builder: (context, value, _) => AlertDialog(
-            backgroundColor: colors.card,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text('Downloading v${versionToInstall.versionName}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: value > 0 ? value : null,
-                    color: colors.accentEnd,
-                    backgroundColor: colors.cardBorder,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(value > 0
-                    ? '${(value * 100).toStringAsFixed(0)}%'
-                    : 'Starting...'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  cancelled = true;
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ),
-      );
+      manager.start(taskId, app.name);
 
       final client = http.Client();
       try {
@@ -862,37 +827,34 @@ class _AppDetailsBody extends ConsumerWidget {
         final sink = file.openWrite();
 
         await for (final chunk in response.stream) {
-          if (cancelled) {
+          if (manager.cancelRequested(taskId)) {
             await sink.close();
             return;
           }
           sink.add(chunk);
           received += chunk.length;
           if (total > 0) {
-            progress.value = received / total;
+            manager.updateProgress(taskId, received / total);
           }
         }
 
         await sink.close();
 
-        if (cancelled) return;
-        if (!context.mounted) return;
+        if (manager.cancelRequested(taskId)) return;
 
-        Navigator.of(context, rootNavigator: true).pop();
-
+        manager.setInstalling(taskId);
         await ApkInstaller.install(filePath);
+        manager.finish(taskId);
       } finally {
         client.close();
       }
-    } catch (e, st) {
-      print('Download error: $e');
-      print('Stack: $st');
-      if (context.mounted) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (_) {}
+    } catch (e) {
+      debugPrint('Download error: $e');
+      if (taskId != null) {
+        manager.fail(taskId, 'Download failed');
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e')),
+          SnackBar(content: Text('Download error: $e')),
         );
       }
     }
